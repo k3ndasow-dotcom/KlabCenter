@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>KlabCenter — Gestion</title>
+<title>KlabCenter — Gestion d’activité</title>
+<meta name="description" content="KlabCenter : gestion des ventes, clients, produits, stocks, commandes, créances et trésorerie.">
+<meta name="application-version" content="2026.08-final">
 
 <!-- PWA : rend l'application installable comme une vraie appli -->
 <link rel="manifest" href="./manifest.json">
@@ -72,6 +74,8 @@
   .brand-word b{color:#9DBBF6;}
   .brand-sub{font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:#B7C7EE; margin-top:2px;}
   .header-date{margin-left:auto; font-size:11px; color:#C9D6F5; text-align:right;}
+  .header-sync{font-size:10px; color:#DCE6FA; max-width:150px; text-align:right; line-height:1.25;}
+  .quick-actions .btn-row{margin-top:4px; flex-wrap:wrap;}
 
   nav.tabs{
     display:flex; gap:6px; overflow-x:auto; margin-top:14px;
@@ -255,6 +259,7 @@
       <div class="brand-sub">Gestion d'activité</div>
     </div>
     <div class="header-date" id="headerDate"></div>
+    <div class="header-sync" id="connectionBadge" title="État de synchronisation">Connexion…</div>
     <button id="btnHeaderLogout" title="Se déconnecter" style="display:none;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:#fff;width:30px;height:30px;border-radius:9px;font-size:13px;cursor:pointer;flex:0 0 auto;">🚪</button>
   </div>
   <nav class="tabs" id="tabs"></nav>
@@ -306,9 +311,10 @@ function secondaryAuth(){
 }
 
 let onlineState = navigator.onLine;
+let syncState = 'synced'; // synced | pending | failed
 window.addEventListener('online', ()=>{ onlineState=true; updateConnectionBadge(); showToast('🟢 Connexion rétablie — synchronisation Firebase'); });
 window.addEventListener('offline', ()=>{ onlineState=false; updateConnectionBadge(); showToast('🟠 Hors connexion — les données restent disponibles'); });
-function updateConnectionBadge(){ const el=document.getElementById('connectionBadge'); if(el){ el.textContent=onlineState?'🟢 En ligne':'🟠 Hors connexion'; el.title=onlineState?'Firebase disponible':'Mode hors connexion'; } }
+function updateConnectionBadge(){ const el=document.getElementById('connectionBadge'); if(el){ const label=onlineState?(syncState==='failed'?'🔴 Échec de synchronisation':syncState==='pending'?'🟡 Synchronisation…':'🟢 En ligne · Synchronisé'):'🟠 Hors connexion · Données locales'; el.textContent=label; el.title=syncState==='failed'?'La dernière écriture n’a pas été confirmée par Firebase':onlineState?'Firebase disponible':'Les modifications seront à confirmer à la reconnexion'; } }
 </script>
 
 <script>
@@ -382,13 +388,15 @@ function startRealtimeSync(){
   }, err=>console.warn('Synchronisation temps réel indisponible', err));
 }
 async function storageSet(key, value){
+  syncState='pending'; updateConnectionBadge();
   let ok = false;
   try{
     await db.collection('users').doc(dataOwnerUid).collection('data').doc(key)
       .set({ json: JSON.stringify(value), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    ok = true;
-  }catch(e){ console.warn('Écriture Firestore différée (hors-ligne ?)', e); ok = true; /* Firestore la rejouera à la reconnexion */ }
+    ok = true; syncState='synced';
+  }catch(e){ console.warn('Écriture Firestore non confirmée', e); syncState='failed'; }
   try{ localStorage.setItem(userKey(key), JSON.stringify(value)); }catch(e){}
+  updateConnectionBadge();
   return ok;
 }
 
@@ -460,7 +468,7 @@ async function journaliserAction(key, action){
 // persist('clients', 'creation') ou persist('clients', 'modification').
 async function persist(key, action){
   const ok = await storageSet(KEYS[key], state[key]);
-  if(!ok) showToast("⚠️ Sauvegarde impossible sur cet appareil/navigateur.");
+  if(!ok) showToast("⚠️ Donnée conservée localement, mais non confirmée par Firebase. Reconnectez-vous avant de fermer.");
   if(action) journaliserAction(key, action);
 }
 
@@ -638,9 +646,9 @@ function sortiesFor(produitId){
   return state.ventes.filter(v=>v.produitId===produitId).reduce((s,v)=>s+Number(v.quantite||0),0);
 }
 function stockActuel(p){
-  if(p.type==='Service') return null;
-  const sorties = sortiesFor(p.id);
-  return Number(p.stockInitial||0) + Number(p.entrees||0) - sorties - Number(p.ajustements||0);
+  if(!p || p.type==='Service') return null;
+  const ventes = sortiesFor(p.id);
+  return Math.max(0, Number(p.stockInitial||0) + Number(p.entrees||0) - ventes + Number(p.ajustements||0));
 }
 function statutStock(p){
   if(p.type==='Service') return 'Service';
@@ -767,11 +775,11 @@ function render(){
    VUE — ACCUEIL
    ============================================================ */
 function viewAccueil(){
-  const alertes = state.produits.filter(p=>['RUPTURE','FAIBLE'].includes(statutStock(p)));
+  const alertes = state.produits.filter(p=>p.actif!==false && ['RUPTURE','FAIBLE'].includes(statutStock(p)));
   const dernieresVentes = [...state.ventes].sort((a,b)=> (b.date||'').localeCompare(a.date||'')).slice(0,5);
   return `
     <div class="section-title">Tableau de bord</div>
-    <div class="section-sub">Vue d'ensemble de votre activité</div>
+    <div class="section-sub">Vue d'ensemble de votre activité · Version 2026.08</div>
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-label">Chiffre d'affaires</div><div class="kpi-value num good">${fmtGNF(caTotal())}</div></div>
       <div class="kpi-card"><div class="kpi-label">Dépenses</div><div class="kpi-value num bad">${fmtGNF(depensesTotal())}</div></div>
@@ -779,6 +787,15 @@ function viewAccueil(){
       <div class="kpi-card"><div class="kpi-label">Trésorerie dispo.</div><div class="kpi-value num">${fmtGNF(tresorerieDisponible())}</div></div>
       <div class="kpi-card"><div class="kpi-label">Ventes enregistrées</div><div class="kpi-value num">${state.ventes.length}</div></div>
       <div class="kpi-card"><div class="kpi-label">Stock à surveiller</div><div class="kpi-value num ${alertes.length>0?'warn':'good'}">${alertes.length}</div></div>
+    </div>
+
+    <div class="card quick-actions">
+      <h3>⚡ Actions rapides</h3>
+      <div class="btn-row">
+        <button class="btn btn-primary" data-quick-tab="ventes">Nouvelle vente</button>
+        <button class="btn btn-ghost" data-quick-tab="commandes">Préparer une commande</button>
+        <button class="btn btn-ghost" data-quick-tab="clients">Ajouter un client</button>
+      </div>
     </div>
 
     <div class="card">
@@ -828,11 +845,12 @@ function monthlyData(months){
   }
   const idx = {}; buckets.forEach((b,i)=>idx[b.key]=i);
   state.ventes.forEach(v=>{ const k=(v.date||'').slice(0,7); if(k in idx) buckets[idx[k]].ca += ventesTotal(v); });
-  state.depenses.forEach(d=>{ const k=(d.date||'').slice(0,7); if(k in idx) buckets[idx[k]].dep += Number(d.montant||0); });
+  state.depenses.filter(d=>d.annulee!==true).forEach(d=>{ const k=(d.date||'').slice(0,7); if(k in idx) buckets[idx[k]].dep += Number(d.montant||0); });
   return buckets;
 }
 let accueilChart = null;
 function attachAccueilHandlers(){
+  document.querySelectorAll('[data-quick-tab]').forEach(b=>b.addEventListener('click',()=>{state.activeTab=b.dataset.quickTab;render();}));
   const canvas = document.getElementById('chartCA');
   if(!canvas || typeof Chart==='undefined') return;
   const data = monthlyData(6);
@@ -1684,6 +1702,7 @@ async function receptionnerCommande(id){
   await persist('produits','modification'); await persist('commandes','modification'); await persist('mouvementsStock','creation'); showToast('Réception enregistrée'); render();
 }
 async function validerCommande(id){
+  if(!estProprietaire()){ showToast('Validation réservée au propriétaire'); return; }
   const c=state.commandes.find(x=>x.id===id); if(!c || c.statut!=='Brouillon') return;
   const choix=await customPrompt('Mode de paiement (Espèces, Orange Money, MTN Mobile Money ou Virement)',{title:'Valider et payer la commande',defaultValue:'Espèces',okText:'Valider'});
   if(choix===null)return;
@@ -1696,6 +1715,7 @@ async function validerCommande(id){
   await persist('depenses','creation'); await persist('commandes','modification'); showToast('Commande validée et sortie enregistrée'); render();
 }
 async function annulerCommande(id){
+  if(!estProprietaire()){ showToast('Annulation réservée au propriétaire'); return; }
   const c=state.commandes.find(x=>x.id===id); if(!c || c.statut==='Annulée') return;
   if(!await customConfirm('Annuler cette commande ? Les quantités déjà réceptionnées seront retirées du stock et la sortie de trésorerie sera neutralisée.',{title:'Annulation de commande',okText:'Annuler la commande',danger:true}))return;
   let stockModifie=false;
@@ -1988,12 +2008,14 @@ function enregistrerMouvementStock({produitId,quantite,type,reference,notes=''})
   state.mouvementsStock.push({id:uid('mvt'),date:todayISO(),produitId,quantite:Number(quantite),type,reference:reference||'',notes, auteur:currentUser?.email||''});
 }
 function exportBackup(){
+  if(!estProprietaire()){ showToast('Sauvegarde réservée au propriétaire'); return; }
   const payload={format:'KlabCenter-backup',version:2,exportedAt:new Date().toISOString(),data:{}};
   Object.keys(KEYS).forEach(k=>{payload.data[k]=state[k];});
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='KlabCenter_sauvegarde_'+todayISO()+'.json'; a.click(); URL.revokeObjectURL(a.href); showToast('Sauvegarde JSON téléchargée');
 }
 async function importBackup(file){
+  if(!estProprietaire()){ showToast('Restauration réservée au propriétaire'); return; }
   if(!file)return;
   try{
     const payload=JSON.parse(await file.text());

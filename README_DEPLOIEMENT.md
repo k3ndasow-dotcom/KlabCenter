@@ -74,3 +74,16 @@ modifier le JSON directement. Si vous avez besoin d'une garantie absolue au nive
 (et pas seulement de l'interface), il faudrait restructurer le stockage en un document Firestore par élément
 (un document par client, par produit, etc.) plutôt qu'un document unique par type — un changement plus
 important, à faire savoir si vous le souhaitez.
+
+
+## 10. Version finale 2026.08
+
+La version finale affiche l’état de synchronisation dans l’en-tête. « En ligne · Synchronisé » signifie que la dernière écriture a été confirmée par Firebase. « Synchronisation… » indique qu’une écriture est en cours. « Échec de synchronisation » signifie que la donnée a pu rester localement sur l’appareil et qu’il faut reconnecter l’appareil avant de fermer la page.
+
+Le propriétaire doit télécharger régulièrement une sauvegarde JSON depuis Paramètres et conserver plusieurs copies hors de l’appareil. Une restauration remplace les données du compte après confirmation ; elle doit donc être précédée d’une sauvegarde récente.
+
+Les commandes validées créent une sortie de trésorerie liée à la commande. Les réceptions modifient le stock. Une annulation conserve la trace historique, inverse les quantités reçues et neutralise la dépense liée lorsqu’elle existe.
+
+Pour publier une nouvelle version, remplacer `index.html`, `sw.js` et ce fichier dans GitHub Pages. Après publication, fermer puis rouvrir l’application installée et vérifier que le badge indique « En ligne · Synchronisé ».
+
+**Règle d’exploitation :** ne jamais supprimer le projet Firebase, ne jamais recréer la base Firestore et ne jamais changer le `projectId` sans sauvegarde et validation préalable.
