@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "journal_employes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerUid", "order": "ASCENDING" },
+        { "fieldPath": "horodatage", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
