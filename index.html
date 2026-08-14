@@ -1658,7 +1658,12 @@ function attachFournisseursHandlers(){
 let commandeLignesTmp = [{produitId:'',quantite:1,prixUnitaire:0}];
 let commandeFormTmp = {fournisseurId:'', date:'', observations:''};
 function commandesProduitsOptions(selected){
-  return `<option value="">— Choisir un bien —</option>`+state.produits.filter(p=>p.type==='Bien' && p.actif!==false).map(p=>`<option value="${p.id}" ${selected===p.id?'selected':''}>${esc(p.nom)} · stock ${stockActuel(p)}</option>`).join('');
+  const biens=state.produits.filter(p=>p.type==='Bien' && p.actif!==false).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+  return `<option value="">— Choisir un bien —</option>`+biens.map(p=>`<option value="${p.id}" ${selected===p.id?'selected':''}>${esc(p.nom)} · stock ${stockActuel(p)}</option>`).join('')+`<option value="__nouveau__" ${selected==='__nouveau__'?'selected':''}>＋ Nouveau bien absent du catalogue</option>`;
+}
+function commandeNouveauBienFields(l,i){
+  if(l.produitId!=='__nouveau__') return '';
+  return `<div class="field full commande-nouveau-bien"><label>Nom du nouveau bien *</label><input class="commande-nouveau-nom" data-i="${i}" value="${esc(l.nomManuel||'')}" placeholder="Ex : Cartouche HP 305 noire" required></div><div class="field full commande-nouveau-bien"><label>Catégorie</label><select class="commande-nouveau-categorie" data-i="${i}">${CATEGORIES_PRODUITS.map(c=>`<option ${l.categorieManuelle===c?'selected':''}>${c}</option>`).join('')}</select></div>`;
 }
 function viewCommandes(){
   const editObj=state.editing.commandes ? state.commandes.find(c=>c.id===state.editing.commandes) : null;
@@ -1677,7 +1682,7 @@ function viewCommandes(){
         <form id="formCommande" class="form-grid">
           <div class="field"><label>Date</label><input name="date" type="date" required value="${commandeFormTmp.date||todayISO()}"></div>
           <div class="field"><label>Fournisseur *</label><select name="fournisseurId" required>${fournisseurOptions}</select></div>
-          <div id="commandeLignes" class="full">${lignes.map((l,i)=>`<div class="lignes-row commande-ligne" data-i="${i}"><div class="field"><label>${i===0?'Produit (bien)':''}</label><select name="produitId" class="commande-produit" data-i="${i}" required>${commandesProduitsOptions(l.produitId)}</select></div><div class="field"><label>${i===0?'Qté':''}</label><input name="quantite" class="commande-qte" data-i="${i}" type="number" min="1" value="${l.quantite||1}" required></div><div class="field"><label>${i===0?'Prix achat':''}</label><input name="prixUnitaire" class="commande-prix" data-i="${i}" type="number" min="0" value="${l.prixUnitaire||0}" required></div><button type="button" class="row-del" data-remove-ligne="${i}" title="Retirer">✕</button></div>`).join('')}</div>
+          <div id="commandeLignes" class="full">${lignes.map((l,i)=>`<div class="lignes-row commande-ligne" data-i="${i}"><div class="field"><label>${i===0?'Produit (bien)':''}</label><select name="produitId" class="commande-produit" data-i="${i}" required>${commandesProduitsOptions(l.produitId)}</select></div>${commandeNouveauBienFields(l)}<div class="field"><label>${i===0?'Qté':''}</label><input name="quantite" class="commande-qte" data-i="${i}" type="number" min="1" value="${l.quantite||1}" required></div><div class="field"><label>${i===0?'Prix achat':''}</label><input name="prixUnitaire" class="commande-prix" data-i="${i}" type="number" min="0" value="${l.prixUnitaire||0}" required></div><button type="button" class="row-del" data-remove-ligne="${i}" title="Retirer">✕</button></div>`).join('')}</div>
           <button type="button" id="btnAddCommandeLigne" class="btn btn-ghost full">+ Ajouter un bien</button>
           <div class="field full"><label>Observations</label><textarea name="observations" placeholder="Délai, conditions, remarques…">${esc(commandeFormTmp.observations||'')}</textarea></div>
           <div class="btn-row full"><button class="btn btn-primary" type="submit">${editObj?'Enregistrer les modifications':'Enregistrer le brouillon'}</button></div>
@@ -1731,13 +1736,35 @@ function attachCommandesHandlers(){
   document.querySelector('input[name="date"]')?.addEventListener('input',e=>commandeFormTmp.date=e.target.value);
   document.querySelector('select[name="fournisseurId"]')?.addEventListener('change',e=>commandeFormTmp.fournisseurId=e.target.value);
   document.querySelector('textarea[name="observations"]')?.addEventListener('input',e=>commandeFormTmp.observations=e.target.value);
-  document.querySelectorAll('.commande-produit').forEach(s=>s.addEventListener('change',()=>{const i=Number(s.dataset.i);const p=produitById(s.value);commandeLignesTmp[i].produitId=s.value;if(p){commandeLignesTmp[i].prixUnitaire=Number(p.prix)||0;const prix=document.querySelector('.commande-prix[data-i="'+i+'"]');if(prix)prix.value=commandeLignesTmp[i].prixUnitaire;}}));
+  document.querySelectorAll('.commande-produit').forEach(s=>s.addEventListener('change',()=>{const i=Number(s.dataset.i);if(s.value && s.value!=='__nouveau__' && commandeLignesTmp.some((l,j)=>j!==i&&l.produitId===s.value)){showToast('Ce bien est déjà présent dans cette commande');s.value='';commandeLignesTmp[i].produitId='';return;}commandeLignesTmp[i].produitId=s.value;if(s.value==='__nouveau__'){commandeLignesTmp[i].nomManuel='';commandeLignesTmp[i].categorieManuelle='Autres';render();return;}const p=produitById(s.value);if(p){commandeLignesTmp[i].prixUnitaire=Number(p.prix)||0;const prix=document.querySelector('.commande-prix[data-i="'+i+'"]');if(prix)prix.value=commandeLignesTmp[i].prixUnitaire;}}));
+  document.querySelectorAll('.commande-nouveau-nom').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].nomManuel=x.value));
+  document.querySelectorAll('.commande-nouveau-categorie').forEach(x=>x.addEventListener('change',()=>commandeLignesTmp[Number(x.dataset.i)].categorieManuelle=x.value));
   document.querySelectorAll('.commande-qte').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].quantite=Number(x.value)||1));
   document.querySelectorAll('.commande-prix').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].prixUnitaire=Number(x.value)||0));
   document.querySelectorAll('[data-remove-ligne]').forEach(b=>b.addEventListener('click',()=>{commandeLignesTmp.splice(Number(b.dataset.removeLigne),1);if(!commandeLignesTmp.length)commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];render();}));
   document.getElementById('btnAddCommandeLigne')?.addEventListener('click',()=>{commandeLignesTmp.push({produitId:'',quantite:1,prixUnitaire:0});render();});
   document.getElementById('cancelEditCommande')?.addEventListener('click',()=>{state.editing.commandes=null;commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];commandeFormTmp={fournisseurId:'',date:todayISO(),observations:''};render();});
-  document.getElementById('formCommande')?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);commandeFormTmp.date=fd.get('date')||todayISO();commandeFormTmp.fournisseurId=fd.get('fournisseurId')||'';commandeFormTmp.observations=(fd.get('observations')||'').trim();const editId=state.editing.commandes;const old=editId?state.commandes.find(c=>c.id===editId):null;const lignes=commandeLignesTmp.filter(l=>l.produitId).map(l=>{const p=produitById(l.produitId);const oldLine=old?.lignes?.find(x=>x.produitId===l.produitId);return {produitId:l.produitId,nom:p?p.nom:'—',quantite:Number(l.quantite)||1,quantiteRecue:Number(oldLine?.quantiteRecue||l.quantiteRecue||0),prixUnitaire:Number(l.prixUnitaire)||0};});if(!fd.get('fournisseurId')||!lignes.length){showToast('Choisissez un fournisseur et au moins un bien');return;}const obj={id:old?.id||uid('cmd'),numero:old?.numero||'CMD-'+String(state.commandes.length+1).padStart(4,'0'),date:fd.get('date')||todayISO(),fournisseurId:fd.get('fournisseurId'),lignes,observations:fd.get('observations').trim(),statut:old?.statut||'Brouillon'};if(editId){Object.assign(old,obj);state.editing.commandes=null;}else state.commandes.push(obj);commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];commandeFormTmp={fournisseurId:'',date:todayISO(),observations:''};await persist('commandes',editId?'modification':'creation');showToast('Commande enregistrée');render();});
+  document.getElementById('formCommande')?.addEventListener('submit',async e=>{
+    e.preventDefault(); const fd=new FormData(e.target); commandeFormTmp.date=fd.get('date')||todayISO(); commandeFormTmp.fournisseurId=fd.get('fournisseurId')||''; commandeFormTmp.observations=(fd.get('observations')||'').trim();
+    const editId=state.editing.commandes; const old=editId?state.commandes.find(c=>c.id===editId):null; let catalogueAjoute=false; const lignes=[]; const produitsDejaVus=new Set(); const nomsManuelsDejaVus=new Set();
+    for(const l of commandeLignesTmp.filter(x=>x.produitId)){
+      let produitId=l.produitId; let p=produitById(produitId);
+      if(produitId==='__nouveau__'){
+        const nom=String(l.nomManuel||'').trim(); if(!nom){showToast('Saisissez le nom du nouveau bien');return;} const cleNom=nom.toLowerCase(); if(nomsManuelsDejaVus.has(cleNom)){showToast('Ce nouveau bien est déjà présent dans cette commande');return;} nomsManuelsDejaVus.add(cleNom);
+        const existant=state.produits.find(x=>(x.nom||'').trim().toLowerCase()===nom.toLowerCase() && x.type==='Bien');
+        if(existant){produitId=existant.id;p=existant;}
+        else {p={id:uid('prod'),nom,categorie:l.categorieManuelle||'Autres',type:'Bien',prix:0,stockInitial:0,entrees:0,seuilAlerte:5,actif:true,dateCreation:todayISO()};state.produits.push(p);produitId=p.id;catalogueAjoute=true;}
+      }
+      if(!p){showToast('Produit introuvable dans le catalogue');return;} if(produitsDejaVus.has(produitId)){showToast('Un même bien ne peut apparaître qu’une seule fois dans cette commande');return;} produitsDejaVus.add(produitId);
+      const oldLine=old?.lignes?.find(x=>x.produitId===produitId || x.nom===p.nom);
+      lignes.push({produitId,nom:p.nom,quantite:Number(l.quantite)||1,quantiteRecue:Number(oldLine?.quantiteRecue||l.quantiteRecue||0),prixUnitaire:Number(l.prixUnitaire)||0});
+    }
+    if(!fd.get('fournisseurId')||!lignes.length){showToast('Choisissez un fournisseur et au moins un bien');return;}
+    const obj={id:old?.id||uid('cmd'),numero:old?.numero||'CMD-'+String(state.commandes.length+1).padStart(4,'0'),date:fd.get('date')||todayISO(),fournisseurId:fd.get('fournisseurId'),lignes,observations:fd.get('observations').trim(),statut:old?.statut||'Brouillon'};
+    if(editId){Object.assign(old,obj);state.editing.commandes=null;}else state.commandes.push(obj);
+    commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];commandeFormTmp={fournisseurId:'',date:todayISO(),observations:''};
+    if(catalogueAjoute) await persist('produits','creation'); await persist('commandes',editId?'modification':'creation'); showToast(catalogueAjoute?'Commande enregistrée et nouveau bien ajouté au catalogue':'Commande enregistrée'); render();
+  });
   document.querySelectorAll('[data-edit-commande]').forEach(b=>b.addEventListener('click',()=>{state.editing.commandes=b.dataset.editCommande;const c=state.commandes.find(x=>x.id===b.dataset.editCommande);commandeFormTmp={fournisseurId:c?.fournisseurId||'',date:c?.date||todayISO(),observations:c?.observations||''};commandeLignesTmp=(c?.lignes||[]).map(l=>({...l}));render();}));
   document.querySelectorAll('[data-print-commande]').forEach(b=>b.addEventListener('click',()=>imprimerCommande(b.dataset.printCommande)));
   document.querySelectorAll('[data-receive-commande]').forEach(b=>b.addEventListener('click',()=>receptionnerCommande(b.dataset.receiveCommande)));

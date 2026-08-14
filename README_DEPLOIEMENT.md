@@ -87,3 +87,8 @@ Les commandes validées créent une sortie de trésorerie liée à la commande. 
 Pour publier une nouvelle version, remplacer `index.html`, `sw.js` et ce fichier dans GitHub Pages. Après publication, fermer puis rouvrir l’application installée et vérifier que le badge indique « En ligne · Synchronisé ».
 
 **Règle d’exploitation :** ne jamais supprimer le projet Firebase, ne jamais recréer la base Firestore et ne jamais changer le `projectId` sans sauvegarde et validation préalable.
+
+
+## 11. Règle des commandes multi-lignes
+
+Un même bien ne peut apparaître qu’une seule fois dans une même commande fournisseur. Si le bien est déjà sélectionné sur une autre ligne, l’application refuse la sélection. Le contrôle est également répété au moment de l’enregistrement pour éviter les doublons issus d’une saisie manuelle ou d’une ancienne version. Le bien reste disponible dans une commande future.
