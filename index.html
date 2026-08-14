@@ -317,12 +317,12 @@ function updateConnectionBadge(){ const el=document.getElementById('connectionBa
    ============================================================ */
 const KEYS = {
   clients:'kc_clients', produits:'kc_produits', ventes:'kc_ventes',
-  depenses:'kc_depenses', factures:'kc_factures', parametres:'kc_parametres',
+  depenses:'kc_depenses', factures:'kc_factures', fournisseurs:'kc_fournisseurs', commandes:'kc_commandes', parametres:'kc_parametres',
   tresorerie:'kc_tresorerie'
 };
 
 let state = {
-  clients: [], produits: [], ventes: [], depenses: [], factures: [],
+  clients: [], produits: [], ventes: [], depenses: [], factures: [], fournisseurs: [], commandes: [],
   parametres: { nom:'KlabCenter', telephone:'', adresse:'Kankalabé Centre, en face de la Mosquée du Centre', email:'klabcentergn@gmail.com', devise:'GNF', nif:'' },
   tresorerie: { soldeDepart: 0 },
   activeTab: 'accueil',
@@ -334,8 +334,8 @@ let state = {
   journalLoading: false,
   journalLoaded: false,
   loading: true,
-  editing: { clients:null, produits:null, ventes:null, depenses:null },
-  search: { clients:'', produits:'', ventes:'', depenses:'' }
+  editing: { clients:null, produits:null, ventes:null, depenses:null, commandes:null },
+  search: { clients:'', produits:'', ventes:'', depenses:'', commandes:'' }
 };
 
 const MODES_PAIEMENT = ['Espèces','Orange Money','MTN Mobile Money','Virement','Crédit'];
@@ -710,6 +710,8 @@ const TABS_ALL = [
   {id:'ventes',     label:'🛒 Ventes',     roles:['proprietaire','secretaire']},
   {id:'depenses',   label:'💸 Dépenses',   roles:['proprietaire','secretaire']},
   {id:'factures',   label:'🧾 Factures',   roles:['proprietaire','secretaire']},
+  {id:'fournisseurs',label:'🏭 Fournisseurs',roles:['proprietaire','secretaire']},
+  {id:'commandes',  label:'📋 Commandes',  roles:['proprietaire','secretaire','tresorier']},
   {id:'tresorerie', label:'💰 Trésorerie', roles:['proprietaire','tresorier']},
   {id:'employes',   label:'🧑‍💼 Employés', roles:['proprietaire']},
   {id:'parametres', label:'⚙️ Paramètres', roles:['proprietaire']},
@@ -753,6 +755,8 @@ function render(){
     case 'ventes': app.innerHTML = viewVentes(); attachVentesHandlers(); return;
     case 'depenses': app.innerHTML = viewDepenses(); attachDepensesHandlers(); return;
     case 'factures': app.innerHTML = viewFactures(); attachFacturesHandlers(); return;
+    case 'fournisseurs': app.innerHTML = viewFournisseurs(); attachFournisseursHandlers(); return;
+    case 'commandes': app.innerHTML = viewCommandes(); attachCommandesHandlers(); return;
     case 'tresorerie': app.innerHTML = viewTresorerie(); attachTresorerieHandlers(); return;
     case 'employes': app.innerHTML = viewEmployes(); attachEmployesHandlers(); return;
     case 'parametres': app.innerHTML = viewParametres(); attachParametresHandlers(); return;
@@ -1572,6 +1576,105 @@ function telechargerFacturePdf(f, c, total){
     console.error(e);
     showToast("Impossible de générer le PDF sur cet appareil.");
   }
+}
+
+/* ============================================================
+   VUE — FOURNISSEURS & COMMANDES
+   ============================================================ */
+function fournisseurById(id){ return state.fournisseurs.find(f=>f.id===id); }
+function commandeTotal(c){ return (c.lignes||[]).reduce((s,l)=>s+Number(l.quantite||0)*Number(l.prixUnitaire||0),0); }
+function commandeReste(c){ return (c.lignes||[]).reduce((s,l)=>s+Math.max(0,Number(l.quantite||0)-Number(l.quantiteRecue||0)),0); }
+function statutCommande(c){
+  if(c.statut==='Annulée') return 'Annulée';
+  if(commandeReste(c)<=0 && (c.lignes||[]).length) return 'Réceptionnée';
+  if((c.lignes||[]).some(l=>Number(l.quantiteRecue||0)>0)) return 'Réception partielle';
+  return c.statut||'Brouillon';
+}
+function viewFournisseurs(){
+  return `<div class="section-title">Fournisseurs</div>
+    <div class="section-sub">Contacts utilisés pour préparer les commandes d’approvisionnement.</div>
+    <div class="content-grid">
+      <div class="card"><h3>➕ Nouveau fournisseur</h3>
+        <form id="formFournisseur" class="form-grid">
+          <div class="field full"><label>Nom *</label><input name="nom" required placeholder="Ex : ABC Distribution"></div>
+          <div class="field"><label>Téléphone</label><input name="telephone" placeholder="628 00 00 00"></div>
+          <div class="field"><label>Email</label><input name="email" type="email" placeholder="contact@fournisseur.com"></div>
+          <div class="field full"><label>Adresse</label><input name="adresse" placeholder="Adresse du fournisseur"></div>
+          <div class="field full"><label>Notes</label><textarea name="notes" placeholder="Conditions, délai habituel…"></textarea></div>
+          <div class="btn-row full"><button class="btn btn-primary" type="submit">Enregistrer le fournisseur</button></div>
+        </form>
+      </div>
+      <div><div class="section-divider">Liste des fournisseurs</div>
+        ${state.fournisseurs.length===0 ? '<div class="empty">Aucun fournisseur enregistré.</div>' : `<div class="list">${state.fournisseurs.map(f=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(f.nom)}</div><div class="row-meta">${esc(f.telephone||'—')} · ${esc(f.email||'—')} · ${esc(f.adresse||'—')}</div></div>${estProprietaire()?`<button class="row-del" data-del-fournisseur="${f.id}" title="Supprimer">✕</button>`:''}</div>`).join('')}</div>`}
+      </div>
+    </div>`;
+}
+function attachFournisseursHandlers(){
+  document.getElementById('formFournisseur')?.addEventListener('submit', async e=>{
+    e.preventDefault(); const fd=new FormData(e.target); const nom=fd.get('nom').trim(); if(!nom)return;
+    state.fournisseurs.push({id:uid('frs'),nom,telephone:fd.get('telephone').trim(),email:fd.get('email').trim(),adresse:fd.get('adresse').trim(),notes:fd.get('notes').trim()});
+    await persist('fournisseurs','creation'); showToast('Fournisseur enregistré'); render();
+  });
+  document.querySelectorAll('[data-del-fournisseur]').forEach(b=>b.addEventListener('click',async()=>{
+    if(!estProprietaire())return; if(!await customConfirm('Supprimer ce fournisseur ?', {title:'Suppression',okText:'Supprimer',danger:true}))return;
+    state.fournisseurs=state.fournisseurs.filter(f=>f.id!==b.dataset.delFournisseur); await persist('fournisseurs'); render();
+  }));
+}
+let commandeLignesTmp = [{produitId:'',quantite:1,prixUnitaire:0}];
+function commandesProduitsOptions(selected){
+  return `<option value="">— Choisir un bien —</option>`+state.produits.filter(p=>p.type==='Bien').map(p=>`<option value="${p.id}" ${selected===p.id?'selected':''}>${esc(p.nom)} · stock ${stockActuel(p)}</option>`).join('');
+}
+function viewCommandes(){
+  const editObj=state.editing.commandes ? state.commandes.find(c=>c.id===state.editing.commandes) : null;
+  if(editObj && commandeLignesTmp.length===1 && !commandeLignesTmp[0].produitId) commandeLignesTmp=(editObj.lignes||[]).map(l=>({...l}));
+  const lignes=commandeLignesTmp.length?commandeLignesTmp:[{produitId:'',quantite:1,prixUnitaire:0}];
+  const fournisseurOptions='<option value="">— Choisir un fournisseur —</option>'+state.fournisseurs.map(f=>`<option value="${f.id}" ${editObj?.fournisseurId===f.id?'selected':''}>${esc(f.nom)}</option>`).join('');
+  const liste=[...state.commandes].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const historyHtml = liste.length===0 ? '<div class="empty">Aucune commande préparée.</div>' : '<div class="list">' + liste.map(c=>{ const f=fournisseurById(c.fournisseurId); const receive=statutCommande(c)!=='Réceptionnée'&&statutCommande(c)!=='Annulée' ? '<button class="btn btn-primary" style="padding:6px 9px;font-size:11px;" data-receive-commande="'+c.id+'">Réceptionner</button>' : ''; const del=estProprietaire()&&c.statut==='Brouillon' ? '<button class="row-del" data-del-commande="'+c.id+'" title="Supprimer">✕</button>' : ''; const edit=c.statut==='Brouillon' ? '<button class="row-edit" data-edit-commande="'+c.id+'" title="Modifier">✎</button>' : ''; return '<div class="row-item"><div class="row-main"><div class="row-title">'+esc(c.numero)+' · '+esc(f?f.nom:'Fournisseur supprimé')+'</div><div class="row-meta">'+fmtDate(c.date)+' · '+statutCommande(c)+' · '+c.lignes.length+' ligne(s) · Total '+fmtGNF(commandeTotal(c))+'</div></div>'+edit+'<button class="row-edit" data-print-commande="'+c.id+'" title="Imprimer">⎙</button>'+receive+del+'</div>'; }).join('') + '</div>';
+  return `<div class="section-title">Commandes d’approvisionnement</div>
+    <div class="section-sub">Préparez, imprimez, modifiez puis réceptionnez vos commandes. Le stock ne change qu’à la réception.</div>
+    <div class="content-grid">
+      <div class="card"><h3>${editObj?'✎ Modifier le brouillon':'➕ Nouvelle commande'}</h3>
+        ${editObj?`<div class="editing-banner"><span>Modification de ${esc(editObj.numero)}</span><a id="cancelEditCommande">Annuler</a></div>`:''}
+        <form id="formCommande" class="form-grid">
+          <div class="field"><label>Date</label><input name="date" type="date" required value="${editObj?.date||todayISO()}"></div>
+          <div class="field"><label>Fournisseur *</label><select name="fournisseurId" required>${fournisseurOptions}</select></div>
+          <div id="commandeLignes" class="full">${lignes.map((l,i)=>`<div class="lignes-row commande-ligne" data-i="${i}"><div class="field"><label>${i===0?'Produit (bien)':''}</label><select name="produitId" class="commande-produit" data-i="${i}" required>${commandesProduitsOptions(l.produitId)}</select></div><div class="field"><label>${i===0?'Qté':''}</label><input name="quantite" class="commande-qte" data-i="${i}" type="number" min="1" value="${l.quantite||1}" required></div><div class="field"><label>${i===0?'Prix achat':''}</label><input name="prixUnitaire" class="commande-prix" data-i="${i}" type="number" min="0" value="${l.prixUnitaire||0}" required></div><button type="button" class="row-del" data-remove-ligne="${i}" title="Retirer">✕</button></div>`).join('')}</div>
+          <button type="button" id="btnAddCommandeLigne" class="btn btn-ghost full">+ Ajouter un bien</button>
+          <div class="field full"><label>Observations</label><textarea name="observations" placeholder="Délai, conditions, remarques…">${esc(editObj?.observations||'')}</textarea></div>
+          <div class="btn-row full"><button class="btn btn-primary" type="submit">${editObj?'Enregistrer les modifications':'Enregistrer le brouillon'}</button></div>
+        </form>
+      </div>
+      <div><div class="section-divider">Historique des commandes</div>
+        ${historyHtml}
+      </div>
+    </div>`;
+}
+function imprimerCommande(id){
+  const c=state.commandes.find(x=>x.id===id); if(!c)return; const f=fournisseurById(c.fournisseurId); const w=window.open('','_blank'); if(!w){showToast('Autorisez les fenêtres pop-up pour imprimer');return;}
+  w.document.write(`<html><head><title>${esc(c.numero)}</title><style>body{font-family:Arial,sans-serif;color:#152036;padding:28px;max-width:800px;margin:auto}h1{color:#132C54}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}th:last-child,td:last-child{text-align:right}.meta{color:#657089;line-height:1.7}.total{text-align:right;font-size:18px;font-weight:bold;margin-top:18px}</style></head><body><h1>${esc(state.parametres.nom)}</h1><h2>Bon de commande ${esc(c.numero)}</h2><div class="meta">Date : ${fmtDate(c.date)}<br>Fournisseur : ${esc(f?f.nom:'—')}<br>${esc(f?.telephone||'')} ${esc(f?.adresse||'')}</div><table><thead><tr><th>Produit</th><th>Quantité</th><th>Prix unitaire</th><th>Total</th></tr></thead><tbody>${c.lignes.map(l=>`<tr><td>${esc(l.nom||produitById(l.produitId)?.nom||'—')}</td><td>${l.quantite}</td><td>${fmtGNF(l.prixUnitaire)}</td><td>${fmtGNF(Number(l.quantite||0)*Number(l.prixUnitaire||0))}</td></tr>`).join('')}</tbody></table><div class="total">Total : ${fmtGNF(commandeTotal(c))}</div><p class="meta">${esc(c.observations||'')}</p></body></html>`); w.document.close(); w.focus(); setTimeout(()=>w.print(),250);}
+async function receptionnerCommande(id){
+  const c=state.commandes.find(x=>x.id===id); if(!c)return;
+  for(const l of c.lignes){ const p=produitById(l.produitId); const reste=Math.max(0,Number(l.quantite||0)-Number(l.quantiteRecue||0)); if(!p||reste<=0)continue;
+    const rep=await customPrompt(`Quantité reçue pour ${p.nom} (reste ${reste})`,{title:'Réception partielle',defaultValue:String(reste),type:'number',okText:'Enregistrer'}); if(rep===null)continue;
+    const q=Math.floor(Number(rep)); if(!Number.isFinite(q)||q<0||q>reste){showToast(`Quantité invalide pour ${p.nom}`);continue;}
+    l.quantiteRecue=(Number(l.quantiteRecue)||0)+q; p.entrees=(Number(p.entrees)||0)+q;
+  }
+  c.statut=commandeReste(c)<=0?'Réceptionnée':'Réception partielle'; c.dateDerniereReception=todayISO();
+  await persist('produits','modification'); await persist('commandes','modification'); showToast('Réception enregistrée'); render();
+}
+function attachCommandesHandlers(){
+  document.querySelectorAll('.commande-produit').forEach(s=>s.addEventListener('change',()=>{const i=Number(s.dataset.i);const p=produitById(s.value);if(p)commandeLignesTmp[i].prixUnitaire=Number(p.prix)||0;render();}));
+  document.querySelectorAll('.commande-qte').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].quantite=Number(x.value)||1));
+  document.querySelectorAll('.commande-prix').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].prixUnitaire=Number(x.value)||0));
+  document.querySelectorAll('[data-remove-ligne]').forEach(b=>b.addEventListener('click',()=>{commandeLignesTmp.splice(Number(b.dataset.removeLigne),1);if(!commandeLignesTmp.length)commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];render();}));
+  document.getElementById('btnAddCommandeLigne')?.addEventListener('click',()=>{commandeLignesTmp.push({produitId:'',quantite:1,prixUnitaire:0});render();});
+  document.getElementById('cancelEditCommande')?.addEventListener('click',()=>{state.editing.commandes=null;commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];render();});
+  document.getElementById('formCommande')?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);const editId=state.editing.commandes;const old=editId?state.commandes.find(c=>c.id===editId):null;const lignes=commandeLignesTmp.filter(l=>l.produitId).map(l=>{const p=produitById(l.produitId);const oldLine=old?.lignes?.find(x=>x.produitId===l.produitId);return {produitId:l.produitId,nom:p?p.nom:'—',quantite:Number(l.quantite)||1,quantiteRecue:Number(oldLine?.quantiteRecue||l.quantiteRecue||0),prixUnitaire:Number(l.prixUnitaire)||0};});if(!fd.get('fournisseurId')||!lignes.length){showToast('Choisissez un fournisseur et au moins un bien');return;}const obj={id:old?.id||uid('cmd'),numero:old?.numero||'CMD-'+String(state.commandes.length+1).padStart(4,'0'),date:fd.get('date')||todayISO(),fournisseurId:fd.get('fournisseurId'),lignes,observations:fd.get('observations').trim(),statut:old?.statut||'Brouillon'};if(editId){Object.assign(old,obj);state.editing.commandes=null;}else state.commandes.push(obj);commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];await persist('commandes',editId?'modification':'creation');showToast('Commande enregistrée');render();});
+  document.querySelectorAll('[data-edit-commande]').forEach(b=>b.addEventListener('click',()=>{state.editing.commandes=b.dataset.editCommande;const c=state.commandes.find(x=>x.id===b.dataset.editCommande);commandeLignesTmp=(c?.lignes||[]).map(l=>({...l}));render();}));
+  document.querySelectorAll('[data-print-commande]').forEach(b=>b.addEventListener('click',()=>imprimerCommande(b.dataset.printCommande)));
+  document.querySelectorAll('[data-receive-commande]').forEach(b=>b.addEventListener('click',()=>receptionnerCommande(b.dataset.receiveCommande)));
+  document.querySelectorAll('[data-del-commande]').forEach(b=>b.addEventListener('click',async()=>{if(!await customConfirm('Supprimer ce brouillon ?', {title:'Suppression',okText:'Supprimer',danger:true}))return;state.commandes=state.commandes.filter(c=>c.id!==b.dataset.delCommande);await persist('commandes');render();}));
 }
 
 /* ============================================================

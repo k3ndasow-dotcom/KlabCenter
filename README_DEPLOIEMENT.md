@@ -51,7 +51,11 @@ Depuis l'onglet **Employés** (visible seulement par le compte propriétaire) :
 Ceci repose sur deux nouvelles collections Firestore `liens_employes` (champ `suspendu`) et `journal_employes` —
 **pensez à redéployer `firestore.rules` et `firestore.indexes.json`** après cette mise à jour (voir §2).
 
-## 7. Limite de sécurité connue — suppression par un employé
+## 7. Module Commandes d’approvisionnement
+
+Le module Commandes utilise deux nouveaux documents de données : `kc_fournisseurs` et `kc_commandes`. Les commandes restent en brouillon jusqu’à leur réception. L’impression ne modifie pas le stock. Le bouton « Réceptionner » demande les quantités réellement reçues, accepte les réceptions partielles et ajoute uniquement ces quantités au champ `entrees` du produit. Après ajout de ce module, republiez impérativement `firestore.rules` depuis Firebase Console ou avec `firebase deploy --only firestore:rules` afin d’autoriser ces deux documents.
+
+## 8. Limite de sécurité connue — suppression par un employé
 Les employés n'ont **jamais** de bouton « Supprimer » dans l'interface, et les règles Firestore leur refusent
 l'opération `delete`. **Cependant**, chaque type de donnée (clients, produits, ventes…) est stocké comme un
 document Firestore unique contenant tout le catalogue en JSON. Techniquement, retirer une ligne de ce JSON
