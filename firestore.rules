@@ -26,8 +26,8 @@ service cloud.firestore {
     function accesEmploye(ownerUid, dataId) {
       return estEmployeDe(ownerUid) && !estSuspendu() && (
         dataId == 'kc_parametres' ||
-        (roleEmploye() == 'secretaire' && dataId in ['kc_clients','kc_produits','kc_ventes','kc_depenses','kc_factures','kc_fournisseurs','kc_commandes']) ||
-        (roleEmploye() == 'tresorier'  && dataId in ['kc_tresorerie','kc_commandes'])
+        (roleEmploye() == 'secretaire' && dataId in ['kc_clients','kc_produits','kc_ventes','kc_depenses','kc_factures','kc_fournisseurs','kc_commandes','kc_mouvements_stock']) ||
+        (roleEmploye() == 'tresorier'  && dataId in ['kc_tresorerie','kc_commandes','kc_mouvements_stock'])
       );
     }
 
@@ -49,7 +49,7 @@ service cloud.firestore {
       match /data/{dataId} {
         // Propriétaire : accès complet, y compris suppression.
         allow read, create, update, delete: if ownUser(userId)
-          && dataId in ['kc_clients','kc_produits','kc_ventes','kc_depenses','kc_factures','kc_fournisseurs','kc_commandes','kc_parametres','kc_tresorerie'];
+          && dataId in ['kc_clients','kc_produits','kc_ventes','kc_depenses','kc_factures','kc_fournisseurs','kc_commandes','kc_mouvements_stock','kc_parametres','kc_tresorerie'];
 
         // Employé actif : lecture/écriture selon son rôle, JAMAIS de suppression du document Firestore.
         // Note : chaque type de donnée est stocké comme un unique document JSON (catalogue entier, etc.),

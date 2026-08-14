@@ -55,7 +55,13 @@ Ceci repose sur deux nouvelles collections Firestore `liens_employes` (champ `su
 
 Le module Commandes utilise deux nouveaux documents de données : `kc_fournisseurs` et `kc_commandes`. Les commandes restent en brouillon jusqu’à leur réception. L’impression ne modifie pas le stock. Le bouton « Réceptionner » demande les quantités réellement reçues, accepte les réceptions partielles et ajoute uniquement ces quantités au champ `entrees` du produit. Après ajout de ce module, republiez impérativement `firestore.rules` depuis Firebase Console ou avec `firebase deploy --only firestore:rules` afin d’autoriser ces deux documents.
 
-## 8. Limite de sécurité connue — suppression par un employé
+## 8. Sauvegarde, archivage et mouvements de stock
+
+L’onglet Paramètres permet maintenant de télécharger une sauvegarde JSON complète et de restaurer un fichier KlabCenter après confirmation. Les produits ne sont plus supprimés : ils sont archivés afin de préserver l’historique. Une vente ayant déjà reçu un règlement est protégée contre la modification. Les ventes de biens et les réceptions de commandes alimentent le journal `kc_mouvements_stock`.
+
+Après cette mise à jour, republiez `firestore.rules` et assurez-vous que `kc_mouvements_stock` est autorisé pour les rôles concernés.
+
+## 9. Limite de sécurité connue — suppression par un employé
 Les employés n'ont **jamais** de bouton « Supprimer » dans l'interface, et les règles Firestore leur refusent
 l'opération `delete`. **Cependant**, chaque type de donnée (clients, produits, ventes…) est stocké comme un
 document Firestore unique contenant tout le catalogue en JSON. Techniquement, retirer une ligne de ce JSON

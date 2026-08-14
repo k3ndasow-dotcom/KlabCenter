@@ -317,12 +317,12 @@ function updateConnectionBadge(){ const el=document.getElementById('connectionBa
    ============================================================ */
 const KEYS = {
   clients:'kc_clients', produits:'kc_produits', ventes:'kc_ventes',
-  depenses:'kc_depenses', factures:'kc_factures', fournisseurs:'kc_fournisseurs', commandes:'kc_commandes', parametres:'kc_parametres',
+  depenses:'kc_depenses', factures:'kc_factures', fournisseurs:'kc_fournisseurs', commandes:'kc_commandes', mouvementsStock:'kc_mouvements_stock', parametres:'kc_parametres',
   tresorerie:'kc_tresorerie'
 };
 
 let state = {
-  clients: [], produits: [], ventes: [], depenses: [], factures: [], fournisseurs: [], commandes: [],
+  clients: [], produits: [], ventes: [], depenses: [], factures: [], fournisseurs: [], commandes: [], mouvementsStock: [],
   parametres: { nom:'KlabCenter', telephone:'', adresse:'Kankalabé Centre, en face de la Mosquée du Centre', email:'klabcentergn@gmail.com', devise:'GNF', nif:'' },
   tresorerie: { soldeDepart: 0 },
   activeTab: 'accueil',
@@ -436,7 +436,7 @@ async function loadAll(){
 
 const LABELS_DONNEES = {
   clients:'Clients', produits:'Produits', ventes:'Ventes',
-  depenses:'Dépenses', factures:'Factures', parametres:'Paramètres', tresorerie:'Trésorerie'
+  depenses:'Dépenses', factures:'Factures', fournisseurs:'Fournisseurs', commandes:'Commandes', mouvementsStock:'Mouvements de stock', parametres:'Paramètres', tresorerie:'Trésorerie'
 };
 
 // Journalise une action employé (ajout/modification) pour traçabilité — jamais pour le propriétaire.
@@ -1026,9 +1026,9 @@ function renderProduitsList(list){
           <div class="row-title">${esc(p.nom)}</div>
           <div class="row-meta">${esc(p.categorie||'—')} · ${stockTxt} · ${p.prix?fmtGNF(p.prix):'Prix non défini'}</div>
         </div>
-        <span class="pill ${pillClass}">${statut}</span>
+        <span class="pill ${p.actif===false?'pill-neutral':pillClass}">${p.actif===false?'Archivé':statut}</span>
         <button class="row-edit" data-edit-produit="${p.id}" title="Modifier">✎</button>
-        ${estProprietaire() ? `<button class="row-del" data-del-produit="${p.id}" title="Supprimer">✕</button>` : ''}
+        ${estProprietaire() ? `<button class="row-del" data-archive-produit="${p.id}" title="${p.actif===false?'Réactiver':'Archiver'}">${p.actif===false?'↻':'⏸'}</button>` : ''}
       </div>`;
     }).join('')}
   </div>`;
@@ -1068,7 +1068,7 @@ function attachProduitsHandlers(){
       state.editing.produits = null;
       showToast('Article modifié');
     }else{
-      state.produits.push({ id: uid('prod'), ajustements:0, ...vals });
+      state.produits.push({ id: uid('prod'), ajustements:0, actif:true, ...vals });
       showToast('Article ajouté au catalogue');
     }
     await persist('produits', editId ? 'modification' : 'creation');
@@ -1078,13 +1078,14 @@ function attachProduitsHandlers(){
   document.querySelectorAll('[data-edit-produit]').forEach(b=>{
     b.addEventListener('click', ()=>{ state.editing.produits = b.dataset.editProduit; render(); });
   });
-  document.querySelectorAll('[data-del-produit]').forEach(b=>{
+  document.querySelectorAll('[data-archive-produit]').forEach(b=>{
     b.addEventListener('click', async ()=>{
       if(!estProprietaire()) return;
-      if(!await customConfirm('Supprimer cet article ?', {title:'Suppression', okText:'Supprimer', danger:true})) return;
-      state.produits = state.produits.filter(p=>p.id!==b.dataset.delProduit);
-      if(state.editing.produits===b.dataset.delProduit) state.editing.produits=null;
-      await persist('produits');
+      const p=state.produits.find(x=>x.id===b.dataset.archiveProduit); if(!p)return;
+      const activer=p.actif===false;
+      if(!await customConfirm(activer?'Réactiver cet article ?':'Archiver cet article ? Il restera visible dans l’historique.', {title:activer?'Réactivation':'Archivage', okText:activer?'Réactiver':'Archiver'})) return;
+      p.actif=activer;
+      await persist('produits','modification');
       render();
     });
   });
@@ -1099,12 +1100,12 @@ function attachProduitsHandlers(){
     document.querySelectorAll('[data-edit-produit]').forEach(b=>{
       b.addEventListener('click', ()=>{ state.editing.produits = b.dataset.editProduit; render(); });
     });
-    document.querySelectorAll('[data-del-produit]').forEach(b=>{
+    document.querySelectorAll('[data-archive-produit]').forEach(b=>{
       b.addEventListener('click', async ()=>{
         if(!estProprietaire()) return;
-        if(!await customConfirm('Supprimer cet article ?', {title:'Suppression', okText:'Supprimer', danger:true})) return;
-        state.produits = state.produits.filter(p=>p.id!==b.dataset.delProduit);
-        await persist('produits');
+        const p=state.produits.find(x=>x.id===b.dataset.archiveProduit); if(!p)return;
+        p.actif=p.actif===false;
+        await persist('produits','modification');
         render();
       });
     });
@@ -1126,7 +1127,7 @@ function viewVentes(){
     })
     .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const clientOptions = `<option value="">Client de passage</option>` + state.clients.map(c=>`<option value="${c.id}" ${editObj?.clientId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('');
-  const produitOptions = `<option value="">— Choisir —</option>` + state.produits.map(p=>`<option value="${p.id}" data-prix="${p.prix||0}" ${editObj?.produitId===p.id?'selected':''}>${esc(p.nom)}</option>`).join('');
+  const produitOptions = `<option value="">— Choisir —</option>` + state.produits.filter(p=>p.actif!==false).map(p=>`<option value="${p.id}" data-prix="${p.prix||0}" ${editObj?.produitId===p.id?'selected':''}>${esc(p.nom)}</option>`).join('');
   return `
     <div class="section-title">Ventes</div>
     <div class="section-sub">${state.ventes.length} vente(s) · CA total ${fmtGNF(caTotal())}</div>
@@ -1174,7 +1175,7 @@ function renderVentesList(list){
           <div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)} · ${esc(v.modePaiement)} · Réglé ${fmtGNF(montantRegle(v))} / ${fmtGNF(ventesTotal(v))} · Qté ${v.quantite}</div>
         </div>
         <div class="row-amount">${fmtGNF(ventesTotal(v))}</div>
-        <button class="row-edit" data-edit-vente="${v.id}" title="Modifier">✎</button>
+        ${montantRegle(v)<=0 ? `<button class="row-edit" data-edit-vente="${v.id}" title="Modifier">✎</button>` : `<span class="helper" title="Vente protégée après règlement">🔒</span>`}
         ${estProprietaire() ? `<button class="row-del" data-del-vente="${v.id}" title="Supprimer">✕</button>` : ''}
       </div>`;
     }).join('')}
@@ -1199,6 +1200,7 @@ function attachVentesHandlers(){
     const modePaiement = fd.get('modePaiement');
     const total = (Number(fd.get('quantite'))||1) * (Number(fd.get('prixUnitaire'))||0);
     const existing = editId ? state.ventes.find(x=>x.id===editId) : null;
+    if(editId && existing && montantRegle(existing)>0){ showToast('Cette vente est protégée car un règlement existe déjà.'); return; }
     let reglements = Array.isArray(existing?.reglements) ? existing.reglements : [];
     if(modePaiement!=='Crédit' && reglements.length===0){
       reglements = [{id:uid('reg'), date:fd.get('date')||todayISO(), montant:total, modePaiement}];
@@ -1214,10 +1216,14 @@ function attachVentesHandlers(){
       state.editing.ventes = null;
       showToast('Vente modifiée');
     }else{
-      state.ventes.push({ id: uid('vte'), ...vals });
+      const newVente={ id: uid('vte'), ...vals };
+      state.ventes.push(newVente);
+      const produitVendu=produitById(produitId);
+      if(produitVendu?.type==='Bien') enregistrerMouvementStock({produitId,quantite:-Number(vals.quantite||0),type:'Vente',reference:newVente.id});
       showToast('Vente enregistrée');
     }
     await persist('ventes', editId ? 'modification' : 'creation');
+    if(!editId) await persist('mouvementsStock','creation');
     render();
   });
   document.getElementById('cancelEditVente')?.addEventListener('click', ()=>{ state.editing.ventes=null; render(); });
@@ -1623,7 +1629,7 @@ function attachFournisseursHandlers(){
 let commandeLignesTmp = [{produitId:'',quantite:1,prixUnitaire:0}];
 let commandeFormTmp = {fournisseurId:'', date:'', observations:''};
 function commandesProduitsOptions(selected){
-  return `<option value="">— Choisir un bien —</option>`+state.produits.filter(p=>p.type==='Bien').map(p=>`<option value="${p.id}" ${selected===p.id?'selected':''}>${esc(p.nom)} · stock ${stockActuel(p)}</option>`).join('');
+  return `<option value="">— Choisir un bien —</option>`+state.produits.filter(p=>p.type==='Bien' && p.actif!==false).map(p=>`<option value="${p.id}" ${selected===p.id?'selected':''}>${esc(p.nom)} · stock ${stockActuel(p)}</option>`).join('');
 }
 function viewCommandes(){
   const editObj=state.editing.commandes ? state.commandes.find(c=>c.id===state.editing.commandes) : null;
@@ -1661,10 +1667,10 @@ async function receptionnerCommande(id){
   for(const l of c.lignes){ const p=produitById(l.produitId); const reste=Math.max(0,Number(l.quantite||0)-Number(l.quantiteRecue||0)); if(!p||reste<=0)continue;
     const rep=await customPrompt(`Quantité reçue pour ${p.nom} (reste ${reste})`,{title:'Réception partielle',defaultValue:String(reste),type:'number',okText:'Enregistrer'}); if(rep===null)continue;
     const q=Math.floor(Number(rep)); if(!Number.isFinite(q)||q<0||q>reste){showToast(`Quantité invalide pour ${p.nom}`);continue;}
-    l.quantiteRecue=(Number(l.quantiteRecue)||0)+q; p.entrees=(Number(p.entrees)||0)+q;
+    l.quantiteRecue=(Number(l.quantiteRecue)||0)+q; p.entrees=(Number(p.entrees)||0)+q; enregistrerMouvementStock({produitId:p.id,quantite:q,type:'Réception',reference:c.id});
   }
   c.statut=commandeReste(c)<=0?'Réceptionnée':'Réception partielle'; c.dateDerniereReception=todayISO();
-  await persist('produits','modification'); await persist('commandes','modification'); showToast('Réception enregistrée'); render();
+  await persist('produits','modification'); await persist('commandes','modification'); await persist('mouvementsStock','creation'); showToast('Réception enregistrée'); render();
 }
 function attachCommandesHandlers(){
   document.querySelector('input[name="date"]')?.addEventListener('input',e=>commandeFormTmp.date=e.target.value);
@@ -1941,6 +1947,27 @@ function attachEmployesHandlers(){
   });
 }
 
+function enregistrerMouvementStock({produitId,quantite,type,reference,notes=''}){
+  if(!produitId || !Number(quantite)) return;
+  state.mouvementsStock.push({id:uid('mvt'),date:todayISO(),produitId,quantite:Number(quantite),type,reference:reference||'',notes, auteur:currentUser?.email||''});
+}
+function exportBackup(){
+  const payload={format:'KlabCenter-backup',version:2,exportedAt:new Date().toISOString(),data:{}};
+  Object.keys(KEYS).forEach(k=>{payload.data[k]=state[k];});
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='KlabCenter_sauvegarde_'+todayISO()+'.json'; a.click(); URL.revokeObjectURL(a.href); showToast('Sauvegarde JSON téléchargée');
+}
+async function importBackup(file){
+  if(!file)return;
+  try{
+    const payload=JSON.parse(await file.text());
+    if(payload.format!=='KlabCenter-backup' || !payload.data) throw new Error('Format de sauvegarde invalide');
+    if(!await customConfirm('Cette restauration remplacera les données actuelles. Avez-vous téléchargé une sauvegarde récente ?', {title:'Restaurer une sauvegarde',okText:'Restaurer',danger:true})) return;
+    for(const k of Object.keys(KEYS)) if(Object.prototype.hasOwnProperty.call(payload.data,k)) state[k]=payload.data[k];
+    for(const k of Object.keys(KEYS)) await persist(k,'restauration');
+    showToast('Sauvegarde restaurée'); render();
+  }catch(e){ console.error(e); showToast('Fichier de sauvegarde invalide'); }
+}
 function viewParametres(){
   const p = state.parametres;
   return `
@@ -1963,6 +1990,14 @@ function viewParametres(){
       <h3>📤 Export de vos données</h3>
       <div class="section-sub" style="margin-top:-6px;">Téléchargez un fichier Excel avec vos clients, produits, ventes et dépenses — utile pour votre comptabilité ou une sauvegarde personnelle.</div>
       <button class="btn btn-primary btn-block" id="btnExportExcel">⬇️ Exporter en Excel</button>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <h3>🛡️ Sauvegarde complète</h3>
+      <div class="section-sub" style="margin-top:-6px;">La sauvegarde JSON contient les clients, produits, ventes, règlements, fournisseurs, commandes, dépenses et mouvements de stock.</div>
+      <button class="btn btn-primary btn-block" id="btnExportBackup">⬇️ Télécharger une sauvegarde complète</button>
+      <input id="inputImportBackup" type="file" accept="application/json,.json" style="display:none">
+      <button class="btn btn-ghost btn-block" id="btnImportBackup">↥ Restaurer une sauvegarde</button>
+      <div class="helper">Conservez le fichier sur un autre appareil. La restauration remplace les données actuelles après confirmation.</div>
     </div>
 
     <button class="btn btn-ghost btn-block" id="btnLogout" style="margin-top:14px;">🚪 Se déconnecter</button>
@@ -1995,6 +2030,9 @@ function exportToExcel(){
 }
 function attachParametresHandlers(){
   document.getElementById('btnExportExcel')?.addEventListener('click', exportToExcel);
+  document.getElementById('btnExportBackup')?.addEventListener('click', exportBackup);
+  document.getElementById('btnImportBackup')?.addEventListener('click', ()=>document.getElementById('inputImportBackup')?.click());
+  document.getElementById('inputImportBackup')?.addEventListener('change', e=>importBackup(e.target.files?.[0]));
   document.getElementById('btnLogout')?.addEventListener('click', async ()=>{
     if(await customConfirm('Se déconnecter de votre compte KlabCenter ?', {title:'Déconnexion', okText:'Se déconnecter'})) await logout();
   });
