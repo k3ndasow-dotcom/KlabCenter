@@ -1198,16 +1198,27 @@ function attachVentesHandlers(){
     if(!produitId) return;
     const editId = state.editing.ventes;
     const modePaiement = fd.get('modePaiement');
-    const total = (Number(fd.get('quantite'))||1) * (Number(fd.get('prixUnitaire'))||0);
     const existing = editId ? state.ventes.find(x=>x.id===editId) : null;
     if(editId && existing && montantRegle(existing)>0){ showToast('Cette vente est protégée car un règlement existe déjà.'); return; }
+    const quantiteDemandee = Math.max(1, Math.floor(Number(fd.get('quantite'))||1));
+    const total = quantiteDemandee * (Number(fd.get('prixUnitaire'))||0);
+    const produitDemande = produitById(produitId);
+    if(produitDemande?.type==='Bien'){
+      let disponible = Number(stockActuel(produitDemande)||0);
+      // Lors de la modification d’une vente non réglée, on neutralise sa propre quantité déjà sortie.
+      if(editId && existing?.produitId===produitId) disponible += Number(existing.quantite||0);
+      if(quantiteDemandee > disponible){
+        showToast(`Stock insuffisant : ${produitDemande.nom} — disponible ${disponible}, demandé ${quantiteDemandee}`);
+        return;
+      }
+    }
     let reglements = Array.isArray(existing?.reglements) ? existing.reglements : [];
     if(modePaiement!=='Crédit' && reglements.length===0){
       reglements = [{id:uid('reg'), date:fd.get('date')||todayISO(), montant:total, modePaiement}];
     }
     const vals = {
       date: fd.get('date')||todayISO(), clientId: fd.get('clientId')||null,
-      produitId, quantite: Number(fd.get('quantite'))||1, prixUnitaire: Number(fd.get('prixUnitaire'))||0,
+      produitId, quantite: quantiteDemandee, prixUnitaire: Number(fd.get('prixUnitaire'))||0,
       modePaiement, paye: modePaiement!=='Crédit' ? 'Oui' : (reglements.reduce((s,r)=>s+Number(r.montant||0),0)>=total?'Oui':'Non'), reglements,
       observations: fd.get('observations').trim()
     };
