@@ -966,6 +966,7 @@ function attachClientsHandlers(){
 function viewProduits(){
   const editId = state.editing.produits;
   const editObj = editId ? state.produits.find(p=>p.id===editId) : null;
+  const typeProduitInitial = editObj?.type || 'Service';
   const q = (state.search.produits||'').toLowerCase();
   const list = [...state.produits]
     .filter(p => !q || (p.nom||'').toLowerCase().includes(q) || (p.categorie||'').toLowerCase().includes(q))
@@ -993,9 +994,10 @@ function viewProduits(){
             </select>
           </div>
           <div class="field"><label>Prix de vente (GNF)</label><input name="prix" type="number" min="0" placeholder="0" value="${editObj?.prix||''}"></div>
-          <div class="field"><label>Seuil d'alerte (qté)</label><input name="seuilAlerte" type="number" min="0" placeholder="5" value="${editObj?.seuilAlerte??''}"></div>
-          <div class="field"><label>Stock initial</label><input name="stockInitial" type="number" min="0" placeholder="0" value="${editObj?.stockInitial??''}"></div>
-          <div class="field"><label>Entrées (réappro.)</label><input name="entrees" type="number" min="0" placeholder="0" value="${editObj?.entrees??''}"></div>
+          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Seuil d'alerte (qté)</label><input name="seuilAlerte" type="number" min="0" placeholder="5" value="${editObj?.seuilAlerte??''}"></div>
+          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Stock initial</label><input name="stockInitial" type="number" min="0" placeholder="0" value="${editObj?.stockInitial??''}"></div>
+          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Entrées (réappro.)</label><input name="entrees" type="number" min="0" placeholder="0" value="${editObj?.entrees??''}"></div>
+          <div id="stockHelper" class="helper full">${typeProduitInitial==='Bien' ? 'Ce bien physique est suivi en stock.' : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.'}</div>
           <div class="btn-row full"><button type="submit" class="btn btn-primary">${editObj ? 'Enregistrer les modifications' : 'Ajouter au catalogue'}</button></div>
         </form>
       </div>
@@ -1029,16 +1031,32 @@ function renderProduitsList(list){
 }
 function attachProduitsHandlers(){
   const f = document.getElementById('formProduit');
+  const typeSelect = f?.querySelector('[name="type"]');
+  const stockFields = f ? [...f.querySelectorAll('.stock-field')] : [];
+  const stockInputs = f ? [...f.querySelectorAll('[name="seuilAlerte"],[name="stockInitial"],[name="entrees"]')] : [];
+  const stockHelper = document.getElementById('stockHelper');
+  function syncStockFields(){
+    const isBien = typeSelect?.value === 'Bien';
+    stockFields.forEach(el=>{ el.style.display = isBien ? '' : 'none'; });
+    stockInputs.forEach(input=>{ input.disabled = !isBien; if(!isBien) input.value = '0'; });
+    if(stockHelper) stockHelper.textContent = isBien ? 'Ce bien physique est suivi en stock.' : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.';
+  }
+  typeSelect?.addEventListener('change', syncStockFields);
+  syncStockFields();
   f?.addEventListener('submit', async e=>{
     e.preventDefault();
     const fd = new FormData(f);
     const nom = fd.get('nom').trim();
     if(!nom) return;
     const editId = state.editing.produits;
+    const type = fd.get('type');
+    const estBien = type === 'Bien';
     const vals = {
-      nom, categorie: fd.get('categorie'), type: fd.get('type'),
-      prix: Number(fd.get('prix'))||0, seuilAlerte: Number(fd.get('seuilAlerte'))||5,
-      stockInitial: Number(fd.get('stockInitial'))||0, entrees: Number(fd.get('entrees'))||0
+      nom, categorie: fd.get('categorie'), type,
+      prix: Number(fd.get('prix'))||0,
+      seuilAlerte: estBien ? (Number(fd.get('seuilAlerte'))||5) : 0,
+      stockInitial: estBien ? (Number(fd.get('stockInitial'))||0) : 0,
+      entrees: estBien ? (Number(fd.get('entrees'))||0) : 0
     };
     if(editId){
       const p = state.produits.find(x=>x.id===editId);
