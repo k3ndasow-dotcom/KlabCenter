@@ -1746,6 +1746,7 @@ function attachCommandesHandlers(){
   document.getElementById('cancelEditCommande')?.addEventListener('click',()=>{state.editing.commandes=null;commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];commandeFormTmp={fournisseurId:'',date:todayISO(),observations:''};render();});
   document.getElementById('formCommande')?.addEventListener('submit',async e=>{
     e.preventDefault(); const fd=new FormData(e.target); commandeFormTmp.date=fd.get('date')||todayISO(); commandeFormTmp.fournisseurId=fd.get('fournisseurId')||''; commandeFormTmp.observations=(fd.get('observations')||'').trim();
+    commandeLignesTmp.forEach((l,i)=>{const nom=document.querySelector('.commande-nouveau-nom[data-i="'+i+'"]');const cat=document.querySelector('.commande-nouveau-categorie[data-i="'+i+'"]');if(nom)l.nomManuel=nom.value;if(cat)l.categorieManuelle=cat.value;});
     const editId=state.editing.commandes; const old=editId?state.commandes.find(c=>c.id===editId):null; let catalogueAjoute=false; const lignes=[]; const produitsDejaVus=new Set(); const nomsManuelsDejaVus=new Set();
     for(const l of commandeLignesTmp.filter(x=>x.produitId)){
       let produitId=l.produitId; let p=produitById(produitId);
