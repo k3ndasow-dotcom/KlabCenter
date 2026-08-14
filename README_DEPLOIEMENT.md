@@ -61,6 +61,8 @@ L’onglet Paramètres permet maintenant de télécharger une sauvegarde JSON co
 
 Après cette mise à jour, republiez `firestore.rules` et assurez-vous que `kc_mouvements_stock` est autorisé pour les rôles concernés.
 
+Une commande reste d’abord en brouillon. Le bouton « Valider & payer » crée une sortie dans la trésorerie sous forme de dépense liée à la commande. La réception augmente ensuite le stock. Le bouton « Annuler » conserve l’historique, neutralise la dépense si elle existe et retire du stock les quantités déjà réceptionnées. Les commandes annulées ne sont pas supprimées physiquement afin de préserver la traçabilité.
+
 ## 9. Limite de sécurité connue — suppression par un employé
 Les employés n'ont **jamais** de bouton « Supprimer » dans l'interface, et les règles Firestore leur refusent
 l'opération `delete`. **Cependant**, chaque type de donnée (clients, produits, ventes…) est stocké comme un

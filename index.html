@@ -340,7 +340,7 @@ let state = {
 
 const MODES_PAIEMENT = ['Espèces','Orange Money','MTN Mobile Money','Virement','Crédit'];
 const CATEGORIES_DEPENSES = ['Achat marchandises','Loyer','Salaires','Transport','Communication','Électricité/Eau','Marketing/Publicité','Entretien/Réparation','Impôts/Taxes','Fournitures bureau','Autres'];
-const CATEGORIES_PRODUITS = ['Documents & CV','Photographie','Bureautique','Maintenance','Formation','Papeterie','Autres'];
+const CATEGORIES_PRODUITS = ['Documents & CV','Photographie','Bureautique','Maintenance','Formation','Papeterie','Librairie','Fournitures bureau','Fournitures scolaires','Électroniques','Consommables imprimantes','Autres'];
 
 function uid(prefix){ return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function fmtGNF(n){ n = Number(n)||0; return n.toLocaleString('fr-FR',{maximumFractionDigits:0}) + ' GNF'; }
@@ -668,7 +668,7 @@ function totalAchatsClient(clientId){
 }
 
 function caTotal(){ return state.ventes.reduce((s,v)=>s+ventesTotal(v),0); }
-function depensesTotal(){ return state.depenses.reduce((s,d)=>s+Number(d.montant||0),0); }
+function depensesTotal(){ return state.depenses.filter(d=>d.annulee!==true).reduce((s,d)=>s+Number(d.montant||0),0); }
 function beneficeEstime(){ return caTotal() - depensesTotal(); }
 function valeurStock(){
   return state.produits.filter(p=>p.type!=='Service').reduce((s,p)=>{
@@ -680,7 +680,7 @@ function stockAAlerter(){
 }
 function tresorerieParMode(mode){
   const entrees = state.ventes.reduce((s,v)=>s + reglementsVente(v).filter(r=>r.modePaiement===mode).reduce((x,r)=>x+Number(r.montant||0),0),0);
-  const sorties = state.depenses.filter(d=>d.modePaiement===mode).reduce((s,d)=>s+Number(d.montant||0),0);
+  const sorties = state.depenses.filter(d=>d.annulee!==true && d.modePaiement===mode).reduce((s,d)=>s+Number(d.montant||0),0);
   return {entrees, sorties, solde: entrees-sorties};
 }
 function creditsRegles(){
@@ -1322,7 +1322,7 @@ function renderDepensesList(list){
       <div class="row-item">
         <div class="row-main">
           <div class="row-title">${esc(d.description)}</div>
-          <div class="row-meta">${esc(d.categorie)} · ${fmtDate(d.date)} · ${esc(d.modePaiement)}</div>
+          <div class="row-meta">${esc(d.categorie)} · ${fmtDate(d.date)} · ${esc(d.modePaiement)}${d.annulee===true?' · Annulée':''}</div>
         </div>
         <div class="row-amount">${fmtGNF(d.montant)}</div>
         <button class="row-edit" data-edit-depense="${d.id}" title="Modifier">✎</button>
@@ -1650,7 +1650,7 @@ function viewCommandes(){
   const lignes=commandeLignesTmp.length?commandeLignesTmp:[{produitId:'',quantite:1,prixUnitaire:0}];
   const fournisseurOptions='<option value="">— Choisir un fournisseur —</option>'+state.fournisseurs.map(f=>`<option value="${f.id}" ${commandeFormTmp.fournisseurId===f.id?'selected':''}>${esc(f.nom)}</option>`).join('');
   const liste=[...state.commandes].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const historyHtml = liste.length===0 ? '<div class="empty">Aucune commande préparée.</div>' : '<div class="list">' + liste.map(c=>{ const f=fournisseurById(c.fournisseurId); const receive=statutCommande(c)!=='Réceptionnée'&&statutCommande(c)!=='Annulée' ? '<button class="btn btn-primary" style="padding:6px 9px;font-size:11px;" data-receive-commande="'+c.id+'">Réceptionner</button>' : ''; const del=estProprietaire()&&c.statut==='Brouillon' ? '<button class="row-del" data-del-commande="'+c.id+'" title="Supprimer">✕</button>' : ''; const edit=c.statut==='Brouillon' ? '<button class="row-edit" data-edit-commande="'+c.id+'" title="Modifier">✎</button>' : ''; return '<div class="row-item"><div class="row-main"><div class="row-title">'+esc(c.numero)+' · '+esc(f?f.nom:'Fournisseur supprimé')+'</div><div class="row-meta">'+fmtDate(c.date)+' · '+statutCommande(c)+' · '+c.lignes.length+' ligne(s) · Total '+fmtGNF(commandeTotal(c))+'</div></div>'+edit+'<button class="row-edit" data-print-commande="'+c.id+'" title="Imprimer">⎙</button>'+receive+del+'</div>'; }).join('') + '</div>';
+  const historyHtml = liste.length===0 ? '<div class="empty">Aucune commande préparée.</div>' : '<div class="list">' + liste.map(c=>{ const f=fournisseurById(c.fournisseurId); const receive=statutCommande(c)!=='Réceptionnée'&&statutCommande(c)!=='Annulée' ? '<button class="btn btn-primary" style="padding:6px 9px;font-size:11px;" data-receive-commande="'+c.id+'">Réceptionner</button>' : ''; const validate=estProprietaire()&&c.statut==='Brouillon' ? '<button class="btn btn-primary" style="padding:6px 9px;font-size:11px;" data-validate-commande="'+c.id+'">Valider & payer</button>' : ''; const cancel=estProprietaire()&&c.statut!=='Annulée' ? '<button class="row-del" data-cancel-commande="'+c.id+'" title="Annuler la commande">✕</button>' : ''; const edit=c.statut==='Brouillon' ? '<button class="row-edit" data-edit-commande="'+c.id+'" title="Modifier">✎</button>' : ''; return '<div class="row-item"><div class="row-main"><div class="row-title">'+esc(c.numero)+' · '+esc(f?f.nom:'Fournisseur supprimé')+'</div><div class="row-meta">'+fmtDate(c.date)+' · '+statutCommande(c)+' · '+c.lignes.length+' ligne(s) · Total '+fmtGNF(commandeTotal(c))+(c.modePaiement?' · '+esc(c.modePaiement):'')+'</div></div>'+edit+'<button class="row-edit" data-print-commande="'+c.id+'" title="Imprimer">⎙</button>'+validate+receive+cancel+'</div>'; }).join('') + '</div>';
   return `<div class="section-title">Commandes d’approvisionnement</div>
     <div class="section-sub">Préparez, imprimez, modifiez puis réceptionnez vos commandes. Le stock ne change qu’à la réception.</div>
     <div class="content-grid">
@@ -1683,6 +1683,30 @@ async function receptionnerCommande(id){
   c.statut=commandeReste(c)<=0?'Réceptionnée':'Réception partielle'; c.dateDerniereReception=todayISO();
   await persist('produits','modification'); await persist('commandes','modification'); await persist('mouvementsStock','creation'); showToast('Réception enregistrée'); render();
 }
+async function validerCommande(id){
+  const c=state.commandes.find(x=>x.id===id); if(!c || c.statut!=='Brouillon') return;
+  const choix=await customPrompt('Mode de paiement (Espèces, Orange Money, MTN Mobile Money ou Virement)',{title:'Valider et payer la commande',defaultValue:'Espèces',okText:'Valider'});
+  if(choix===null)return;
+  const mode=String(choix).trim();
+  const modes=['Espèces','Orange Money','MTN Mobile Money','Virement'];
+  if(!modes.includes(mode)){showToast('Mode de paiement invalide');return;}
+  const fournisseur=fournisseurById(c.fournisseurId);
+  const dep={id:uid('dep'),date:todayISO(),categorie:'Achat marchandises',description:`Commande ${c.numero} — ${fournisseur?.nom||'Fournisseur'}`,montant:commandeTotal(c),modePaiement:mode,observations:'Sortie liée à la validation de la commande',commandeId:c.id,source:'commande',annulee:false};
+  state.depenses.push(dep); c.depenseId=dep.id; c.modePaiement=mode; c.statut='Validée'; c.dateValidation=todayISO();
+  await persist('depenses','creation'); await persist('commandes','modification'); showToast('Commande validée et sortie enregistrée'); render();
+}
+async function annulerCommande(id){
+  const c=state.commandes.find(x=>x.id===id); if(!c || c.statut==='Annulée') return;
+  if(!await customConfirm('Annuler cette commande ? Les quantités déjà réceptionnées seront retirées du stock et la sortie de trésorerie sera neutralisée.',{title:'Annulation de commande',okText:'Annuler la commande',danger:true}))return;
+  let stockModifie=false;
+  for(const l of c.lignes||[]){ const q=Math.max(0,Number(l.quantiteRecue||0)); const p=produitById(l.produitId); if(!p||!q)continue; p.entrees=Math.max(0,Number(p.entrees||0)-q); enregistrerMouvementStock({produitId:p.id,quantite:-q,type:'Annulation réception',reference:c.id}); stockModifie=true; }
+  if(c.depenseId){ const d=state.depenses.find(x=>x.id===c.depenseId); if(d){d.annulee=true;d.dateAnnulation=todayISO();} }
+  c.statut='Annulée'; c.dateAnnulation=todayISO();
+  if(stockModifie) await persist('produits','modification');
+  if(stockModifie) await persist('mouvementsStock','creation');
+  if(c.depenseId) await persist('depenses','modification');
+  await persist('commandes','modification'); showToast('Commande annulée et impacts neutralisés'); render();
+}
 function attachCommandesHandlers(){
   document.querySelector('input[name="date"]')?.addEventListener('input',e=>commandeFormTmp.date=e.target.value);
   document.querySelector('select[name="fournisseurId"]')?.addEventListener('change',e=>commandeFormTmp.fournisseurId=e.target.value);
@@ -1697,7 +1721,8 @@ function attachCommandesHandlers(){
   document.querySelectorAll('[data-edit-commande]').forEach(b=>b.addEventListener('click',()=>{state.editing.commandes=b.dataset.editCommande;const c=state.commandes.find(x=>x.id===b.dataset.editCommande);commandeFormTmp={fournisseurId:c?.fournisseurId||'',date:c?.date||todayISO(),observations:c?.observations||''};commandeLignesTmp=(c?.lignes||[]).map(l=>({...l}));render();}));
   document.querySelectorAll('[data-print-commande]').forEach(b=>b.addEventListener('click',()=>imprimerCommande(b.dataset.printCommande)));
   document.querySelectorAll('[data-receive-commande]').forEach(b=>b.addEventListener('click',()=>receptionnerCommande(b.dataset.receiveCommande)));
-  document.querySelectorAll('[data-del-commande]').forEach(b=>b.addEventListener('click',async()=>{if(!await customConfirm('Supprimer ce brouillon ?', {title:'Suppression',okText:'Supprimer',danger:true}))return;state.commandes=state.commandes.filter(c=>c.id!==b.dataset.delCommande);await persist('commandes');render();}));
+  document.querySelectorAll('[data-validate-commande]').forEach(b=>b.addEventListener('click',()=>validerCommande(b.dataset.validateCommande)));
+  document.querySelectorAll('[data-cancel-commande]').forEach(b=>b.addEventListener('click',()=>annulerCommande(b.dataset.cancelCommande)));
 }
 
 /* ============================================================
