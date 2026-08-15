@@ -1264,9 +1264,46 @@ function attachVentesHandlers(){
       observations: fd.get('observations').trim()
     };
     if(editId){
+      // Une vente ayant déjà reçu au moins un règlement devient un historique financier
+      // immuable : elle ne peut plus être modifiée, même si l'action est déclenchée
+      // indirectement (ex. interface manipulée ou ancien état local).
+      if(existing && montantRegle(existing) > 0){
+        showToast('🔒 Cette vente est déjà réglée et ne peut plus être modifiée.');
+        state.editing.ventes = null;
+        render();
+        return;
+      }
+
+      const oldProduitId = existing?.produitId;
+      const oldQuantite = Number(existing?.quantite || 0);
+      const oldProduit = produitById(oldProduitId);
+
       Object.assign(existing, vals);
+
+      // Le journal de stock est événementiel : une correction annule l'ancien
+      // mouvement puis enregistre le nouveau. On ne réécrit jamais l'historique.
+      if(oldProduit?.type==='Bien' && oldQuantite){
+        enregistrerMouvementStock({
+          produitId: oldProduitId,
+          quantite: oldQuantite,
+          type:'Correction vente',
+          reference:existing.id,
+          notes:`Annulation du mouvement de la vente ${existing.id} avant correction`
+        });
+      }
+      const nouveauProduit = produitById(produitId);
+      if(nouveauProduit?.type==='Bien' && Number(vals.quantite||0)){
+        enregistrerMouvementStock({
+          produitId,
+          quantite:-Number(vals.quantite||0),
+          type:'Correction vente',
+          reference:existing.id,
+          notes:`Nouveau mouvement après correction de la vente ${existing.id}`
+        });
+      }
+
       state.editing.ventes = null;
-      showToast('Vente modifiée');
+      showToast('Vente modifiée et mouvement de stock corrigé');
     }else{
       const newVente={ id: uid('vte'), ...vals };
       state.ventes.push(newVente);
@@ -1275,7 +1312,8 @@ function attachVentesHandlers(){
       showToast('Vente enregistrée');
     }
     await persist('ventes', editId ? 'modification' : 'creation');
-    if(!editId) await persist('mouvementsStock','creation');
+    if(editId) await persist('mouvementsStock','correction');
+    else await persist('mouvementsStock','creation');
     render();
   });
   document.getElementById('cancelEditVente')?.addEventListener('click', ()=>{ state.editing.ventes=null; render(); });
@@ -1285,10 +1323,35 @@ function attachVentesHandlers(){
   document.querySelectorAll('[data-del-vente]').forEach(b=>{
     b.addEventListener('click', async ()=>{
       if(!estProprietaire()) return;
-      if(!await customConfirm('Supprimer cette vente ?', {title:'Suppression', okText:'Supprimer', danger:true})) return;
-      state.ventes = state.ventes.filter(v=>v.id!==b.dataset.delVente);
-      if(state.editing.ventes===b.dataset.delVente) state.editing.ventes=null;
-      await persist('ventes');
+      const vente = state.ventes.find(v=>v.id===b.dataset.delVente);
+      if(!vente) return;
+
+      // Une vente ayant reçu un règlement ne doit jamais être effacée :
+      // elle constitue une pièce financière. Pour préserver la traçabilité,
+      // l'application demande désormais de conserver cet historique.
+      if(montantRegle(vente) > 0){
+        showToast('🔒 Une vente réglée ne peut pas être supprimée. Conservez-la dans l’historique.');
+        return;
+      }
+
+      if(!await customConfirm('Supprimer cette vente non réglée ?', {title:'Suppression', okText:'Supprimer', danger:true})) return;
+
+      const produit = produitById(vente.produitId);
+      if(produit?.type==='Bien' && Number(vente.quantite||0)){
+        // La suppression d'une vente annule explicitement son mouvement de stock.
+        enregistrerMouvementStock({
+          produitId:vente.produitId,
+          quantite:Number(vente.quantite||0),
+          type:'Annulation vente',
+          reference:vente.id,
+          notes:`Annulation du mouvement liée à la suppression de la vente ${vente.id}`
+        });
+      }
+
+      state.ventes = state.ventes.filter(v=>v.id!==vente.id);
+      if(state.editing.ventes===vente.id) state.editing.ventes=null;
+      await persist('ventes','suppression');
+      await persist('mouvementsStock','annulation');
       render();
     });
   });
@@ -1310,9 +1373,26 @@ function attachVentesHandlers(){
     document.querySelectorAll('[data-del-vente]').forEach(b=>{
       b.addEventListener('click', async ()=>{
         if(!estProprietaire()) return;
-        if(!await customConfirm('Supprimer cette vente ?', {title:'Suppression', okText:'Supprimer', danger:true})) return;
-        state.ventes = state.ventes.filter(v=>v.id!==b.dataset.delVente);
-        await persist('ventes');
+        const vente = state.ventes.find(v=>v.id===b.dataset.delVente);
+        if(!vente) return;
+        if(montantRegle(vente) > 0){
+          showToast('🔒 Une vente réglée ne peut pas être supprimée. Conservez-la dans l’historique.');
+          return;
+        }
+        if(!await customConfirm('Supprimer cette vente non réglée ?', {title:'Suppression', okText:'Supprimer', danger:true})) return;
+        const produit = produitById(vente.produitId);
+        if(produit?.type==='Bien' && Number(vente.quantite||0)){
+          enregistrerMouvementStock({
+            produitId:vente.produitId,
+            quantite:Number(vente.quantite||0),
+            type:'Annulation vente',
+            reference:vente.id,
+            notes:`Annulation du mouvement liée à la suppression de la vente ${vente.id}`
+          });
+        }
+        state.ventes = state.ventes.filter(v=>v.id!==vente.id);
+        await persist('ventes','suppression');
+        await persist('mouvementsStock','annulation');
         render();
       });
     });
