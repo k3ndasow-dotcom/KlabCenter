@@ -243,6 +243,16 @@
   .invoice-view th,.invoice-view td{padding:7px 4px; border-bottom:1px solid var(--border); text-align:left;}
   .invoice-view th:last-child, .invoice-view td:last-child{text-align:right;}
 
+  .splash-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:radial-gradient(circle at 18% 10%,rgba(90,140,240,.38),transparent 35%),linear-gradient(135deg,var(--navy-900),var(--navy-700) 58%,var(--blue-500));color:#fff;opacity:1;visibility:visible;transition:opacity .35s ease,visibility .35s ease;}
+  .splash-screen.is-hidden{opacity:0;visibility:hidden;pointer-events:none;}
+  .splash-content{text-align:center;padding:28px;animation:splash-enter .55s ease both;}
+  .splash-logo{width:88px;height:88px;border-radius:24px;box-shadow:0 14px 34px rgba(0,0,0,.28);margin-bottom:24px;}
+  .splash-kicker{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:#C9D6F5;margin-bottom:12px;}
+  .splash-content h1{font-size:clamp(25px,7vw,42px);line-height:1.15;margin:0 0 12px;font-weight:800;}
+  .splash-content h1 b{color:#BFD2FF;}
+  .splash-subtitle{font-size:14px;color:#DCE6FA;letter-spacing:.04em;}
+  @keyframes splash-enter{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){ .splash-content{animation:none;} .splash-screen{transition:none;} }
   .helper{font-size:11px; color:var(--text-500); margin-top:6px; line-height:1.5;}
   .lignes-row{display:grid; grid-template-columns:2fr 1fr; gap:8px; align-items:end; margin-bottom:8px;}
   ::selection{background:var(--blue-300);}
@@ -250,6 +260,15 @@
 </style>
 </head>
 <body>
+
+<div class="splash-screen" id="splashScreen" role="status" aria-live="polite" aria-label="Bienvenue chez KlabCenter">
+  <div class="splash-content">
+    <img class="splash-logo" src="./icon-192.png" alt="Logo KlabCenter" width="88" height="88">
+    <div class="splash-kicker">Le digital à votre portée</div>
+    <h1>Bienvenue chez <b>KlabCenter</b></h1>
+    <div class="splash-subtitle">Gestion d’activité, simplement.</div>
+  </div>
+</div>
 
 <header class="app-header">
   <div class="header-row">
@@ -268,6 +287,10 @@
 <main id="app"></main>
 
 <div class="toast" id="toast"></div>
+
+<script>
+  window.setTimeout(()=>document.getElementById('splashScreen')?.classList.add('is-hidden'),1800);
+</script>
 
 <!-- Firebase SDK (compat) -->
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
