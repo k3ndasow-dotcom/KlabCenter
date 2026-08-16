@@ -369,7 +369,10 @@ let state = {
 
 const MODES_PAIEMENT = ['Espèces','Orange Money','MTN Mobile Money','Virement','Crédit'];
 const CATEGORIES_DEPENSES = ['Achat marchandises','Loyer','Salaires','Transport','Communication','Électricité/Eau','Marketing/Publicité','Entretien/Réparation','Impôts/Taxes','Fournitures bureau','Autres'];
-const CATEGORIES_PRODUITS = ['Documents & CV','Photographie','Bureautique','Maintenance','Formation','Papeterie','Librairie','Fournitures bureau','Fournitures scolaires','Électroniques','Consommables imprimantes','Autres'];
+const CATEGORIES_BIENS = ['Papeterie','Librairie','Fournitures bureau','Fournitures scolaires','Électroniques','Consommables imprimantes','Bureautique','Autres biens'];
+const CATEGORIES_SERVICES = ['Documents & CV','Photographie','Maintenance','Formation','Installation','Assistance informatique','Impression','Autres services'];
+const CATEGORIES_PRODUITS = [...new Set([...CATEGORIES_BIENS,...CATEGORIES_SERVICES])];
+function categoriesPourType(type){ return type === 'Service' ? CATEGORIES_SERVICES : CATEGORIES_BIENS; }
 const UNITES_CONDITIONNEMENT = ['Unité','Paquet','Carton','Boîte','Lot','Sac','Rouleau','Bouteille'];
 
 function uid(prefix){ return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
@@ -1017,7 +1020,9 @@ function attachClientsHandlers(){
 function viewProduits(){
   const editId = state.editing.produits;
   const editObj = editId ? state.produits.find(p=>p.id===editId) : null;
-  const typeProduitInitial = editObj?.type || 'Service';
+  const typeProduitInitial = editObj?.type || 'Bien';
+  const categoriesInitiales = categoriesPourType(typeProduitInitial);
+  const categorieInitiale = editObj?.categorie && categoriesInitiales.includes(editObj.categorie) ? editObj.categorie : categoriesInitiales[0];
   const uniteStockInitial = editObj?.uniteStock || 'Unité';
   const uniteAchatInitial = editObj?.uniteAchat || 'Unité';
   const facteurAchatInitial = Math.max(1, Number(editObj?.facteurAchat)||1);
@@ -1038,7 +1043,7 @@ function viewProduits(){
         <form id="formProduit" class="form-grid">
           <div class="field full"><label>Nom du produit ou service *</label><input name="nom" required placeholder="Ex : Papier rame A4" value="${esc(editObj?.nom||'')}"></div>
           <div class="field"><label>Nature *</label><select name="type"><option value="Bien" ${editObj?.type==='Bien'?'selected':''}>Bien</option><option value="Service" ${editObj?.type==='Service'?'selected':''}>Service</option></select><div class="helper">Bien = article stocké. Service = prestation, sans stock.</div></div>
-          <div class="field"><label>Catégorie</label><select name="categorie">${CATEGORIES_PRODUITS.map(c=>`<option ${editObj?.categorie===c?'selected':''}>${c}</option>`).join('')}</select></div>
+          <div class="field"><label>Catégorie</label><select name="categorie">${categoriesInitiales.map(c=>`<option ${categorieInitiale===c?'selected':''}>${c}</option>`).join('')}</select></div>
           <div class="field"><label>Prix de vente (GNF)</label><input name="prix" type="number" min="0" placeholder="0" value="${editObj?.prix||''}"><div class="helper">Prix auquel vous vendrez 1 unité de stock ou 1 service. Ce n’est pas le prix d’achat.</div></div>
           <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>1. Unité suivie en stock</label><select name="uniteStock">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${uniteStockInitial===u?'selected':''}>${u}</option>`).join('')}</select><div class="helper">Ce que vous comptez et vendez. Pour le papier : Paquet, pas Feuille.</div></div>
           <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>2. Le fournisseur vous vend en</label><select name="uniteAchat">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${uniteAchatInitial===u?'selected':''}>${u}</option>`).join('')}</select><div class="helper">Exemple : le fournisseur vend 1 carton, mais vous stockez des paquets.</div></div>
@@ -1090,7 +1095,11 @@ function attachProduitsHandlers(){
     conditionnementInputs.forEach(input=>{ input.disabled = !isBien; if(!isBien) input.value = 'Unité'; });
     if(stockHelper){ const stock=f?.querySelector('[name="uniteStock"]')?.value||'Unité'; const achat=f?.querySelector('[name="uniteAchat"]')?.value||'Unité'; const facteur=Math.max(1,Number(f?.querySelector('[name="facteurAchat"]')?.value)||1); stockHelper.textContent = isBien ? `Stock : ${stock}. Achat : 1 ${achat} = ${facteur} ${stock}${facteur>1?'s':''}.` : 'Un service ne demande pas de stock.'; }
   }
-  typeSelect?.addEventListener('change', syncStockFields);
+  typeSelect?.addEventListener('change', ()=>{
+    syncStockFields();
+    const cat=f?.querySelector('[name="categorie"]');
+    if(cat){ const cats=categoriesPourType(typeSelect.value); cat.innerHTML=cats.map(c=>`<option>${esc(c)}</option>`).join(''); cat.value=cats[0]||''; }
+  });
   f?.querySelector('[name="uniteStock"]')?.addEventListener('change', syncStockFields);
   f?.querySelector('[name="uniteAchat"]')?.addEventListener('change', syncStockFields);
   f?.querySelector('[name="facteurAchat"]')?.addEventListener('input', syncStockFields);
@@ -1704,7 +1713,7 @@ function commandesProduitsOptions(selected){
 function commandeNouveauBienFields(l,i){
   if(l.produitId!=='__nouveau__') return '';
   const stock=l.uniteStock||'Unité'; const achat=l.uniteAchat||'Unité'; const facteur=Math.max(1,Number(l.facteurAchat)||1);
-  return `<div class="field full commande-nouveau-bien"><label>Nom du nouveau bien *</label><input name="nomManuel" class="commande-nouveau-nom" data-i="${i}" value="${esc(l.nomManuel||'')}" placeholder="Ex : Cartouche HP 305 noire" required></div><details class="full commande-nouveau-bien"><summary>Catégorie et conditionnement facultatifs</summary><div class="form-grid"><div class="field"><label>Catégorie</label><select name="categorieManuelle" class="commande-nouveau-categorie" data-i="${i}">${CATEGORIES_PRODUITS.map(c=>`<option ${l.categorieManuelle===c?'selected':''}>${c}</option>`).join('')}</select></div><div class="field"><label>Unité de stock</label><select name="uniteStockManuel" class="commande-nouveau-stock" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${stock===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field"><label>Achat en</label><select name="uniteAchatManuel" class="commande-nouveau-unite" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${achat===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field"><label>Unités dans 1 achat</label><input name="facteurAchatManuel" class="commande-nouveau-facteur" data-i="${i}" type="number" min="1" step="1" value="${facteur}" required></div></div></details>`;
+  return `<div class="field full commande-nouveau-bien"><label>Nom du nouveau bien *</label><input name="nomManuel" class="commande-nouveau-nom" data-i="${i}" value="${esc(l.nomManuel||'')}" placeholder="Ex : Cartouche HP 305 noire" required></div><details class="full commande-nouveau-bien"><summary>Catégorie et conditionnement facultatifs</summary><div class="form-grid"><div class="field"><label>Catégorie</label><select name="categorieManuelle" class="commande-nouveau-categorie" data-i="${i}">${CATEGORIES_BIENS.map(c=>`<option ${l.categorieManuelle===c?'selected':''}>${c}</option>`).join('')}</select></div><div class="field"><label>Unité de stock</label><select name="uniteStockManuel" class="commande-nouveau-stock" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${stock===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field"><label>Achat en</label><select name="uniteAchatManuel" class="commande-nouveau-unite" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${achat===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field"><label>Unités dans 1 achat</label><input name="facteurAchatManuel" class="commande-nouveau-facteur" data-i="${i}" type="number" min="1" step="1" value="${facteur}" required></div></div></details>`;
 }
 function viewCommandes(){
   const editObj=state.editing.commandes ? state.commandes.find(c=>c.id===state.editing.commandes) : null;
@@ -2133,6 +2142,21 @@ async function importBackup(file){
     showToast('Sauvegarde restaurée'); render();
   }catch(e){ console.error(e); showToast('Fichier de sauvegarde invalide'); }
 }
+async function demarrerBaseReelle(){
+  if(!estProprietaire()){ showToast('Nettoyage réservé au propriétaire'); return; }
+  const confirmeSauvegarde=await customConfirm('Une sauvegarde JSON sera téléchargée avant le nettoyage. Conservez-la sur un autre appareil.',{title:'Étape 1 — Sauvegarder',okText:'Télécharger et continuer'});
+  if(!confirmeSauvegarde)return;
+  exportBackup();
+  const confirmeSuppression=await customConfirm('Cette action supprimera les clients, produits, services, ventes, dépenses, factures, fournisseurs, commandes et mouvements de test. Les formules et les paramètres de votre entreprise seront conservés. Voulez-vous vraiment commencer la saisie réelle ?',{title:'Étape 2 — Effacer les données de test',okText:'Oui, démarrer proprement',danger:true});
+  if(!confirmeSuppression)return;
+  const vides={clients:[],produits:[],ventes:[],depenses:[],factures:[],fournisseurs:[],commandes:[],mouvementsStock:[]};
+  Object.entries(vides).forEach(([k,v])=>state[k]=v);
+  state.tresorerie={soldeDepart:0};
+  for(const [k,v] of Object.entries(vides)) await persist(k,'initialisation');
+  await persist('tresorerie','initialisation');
+  showToast('Base propre : vous pouvez commencer avec vos données réelles');
+  render();
+}
 function viewParametres(){
   const p = state.parametres;
   return `
@@ -2164,6 +2188,7 @@ function viewParametres(){
       <button class="btn btn-ghost btn-block" id="btnImportBackup">↥ Restaurer une sauvegarde</button>
       <div class="helper">Conservez le fichier sur un autre appareil. La restauration remplace les données actuelles après confirmation.</div>
     </div>
+    ${estProprietaire()?`<div class="card" style="margin-top:16px;border:1px solid #f0b6b6;"><h3>🚀 Démarrer avec les données réelles</h3><div class="section-sub" style="margin-top:-6px;">Télécharge d’abord une sauvegarde, puis efface les données de test. Les formules, les paramètres de l’entreprise et la structure de l’application restent conservés.</div><button class="btn btn-danger btn-block" id="btnDemarrerBaseReelle">Effacer les données de test et commencer</button><div class="helper">À utiliser une seule fois, lorsque toutes les données actuelles sont des essais.</div></div>`:''}
 
     <button class="btn btn-ghost btn-block" id="btnLogout" style="margin-top:14px;">🚪 Se déconnecter</button>
   `;
@@ -2196,6 +2221,7 @@ function exportToExcel(){
 function attachParametresHandlers(){
   document.getElementById('btnExportExcel')?.addEventListener('click', exportToExcel);
   document.getElementById('btnExportBackup')?.addEventListener('click', exportBackup);
+  document.getElementById('btnDemarrerBaseReelle')?.addEventListener('click', demarrerBaseReelle);
   document.getElementById('btnImportBackup')?.addEventListener('click', ()=>document.getElementById('inputImportBackup')?.click());
   document.getElementById('inputImportBackup')?.addEventListener('change', e=>importBackup(e.target.files?.[0]));
   document.getElementById('btnLogout')?.addEventListener('click', async ()=>{

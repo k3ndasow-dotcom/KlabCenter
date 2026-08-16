@@ -165,3 +165,12 @@ Le résumé affiché sous les champs reformule automatiquement la règle. Par ex
 Dans une commande, le prix est intitulé **Prix d’achat pour 1 Carton** ou **Prix d’achat pour 1 Paquet**, selon le conditionnement enregistré. L’application précise qu’il faut saisir le prix d’un conditionnement acheté, et non le total général. Après la saisie de la quantité, un aperçu indique le résultat attendu : `Vous commandez 2 Cartons. Après réception : 10 Paquets en stock.`
 
 La liste des biens affiche également la conversion avant la sélection, par exemple : `Papier rame A4 · 1 Carton = 5 Paquets`. Ces explications sont destinées à permettre à un assistant de travailler sans connaître les termes techniques de l’application.
+
+
+## 19. Démarrage avec les données réelles
+
+Le propriétaire peut maintenant ouvrir **Paramètres → Démarrer avec les données réelles**. L’application demande d’abord de télécharger une sauvegarde JSON, puis demande une seconde confirmation avant d’effacer les données opérationnelles actuelles : clients, produits, services, ventes, dépenses, factures, fournisseurs, commandes, mouvements de stock et solde de trésorerie initial.
+
+Les paramètres de l’entreprise, les formules de calcul, la structure Firebase, les comptes employés et les règles de sécurité ne sont pas supprimés. Cette opération doit être utilisée uniquement lorsque toutes les données présentes sont des essais. La sauvegarde téléchargée permet de revenir en arrière avec **Restaurer une sauvegarde**.
+
+Les catégories sont maintenant séparées. Les biens proposent notamment `Papeterie`, `Librairie`, `Fournitures bureau`, `Fournitures scolaires`, `Électroniques` et `Consommables imprimantes`. Les services proposent notamment `Documents & CV`, `Photographie`, `Maintenance`, `Formation`, `Installation`, `Assistance informatique` et `Impression`. Ainsi, `Maintenance` n’est plus proposée lors de la création d’un bien et un service ne demande jamais de stock.
