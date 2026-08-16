@@ -129,3 +129,12 @@ Le formulaire Produit place automatiquement le curseur sur le type lors d’une 
 Dans une commande, le curseur commence par le fournisseur. Après sa sélection, il passe au premier bien. Pour un bien déjà présent au catalogue, la séquence est : produit, quantité achetée, prix d’achat. Après la saisie du prix et la validation par `Entrée`, une nouvelle ligne est créée et le curseur passe directement au produit suivant. Pour un nouveau bien, la séquence est : nom, catégorie, unité de stock, conditionnement d’achat, nombre d’unités, quantité et prix.
 
 Cette navigation fonctionne avec la touche `Entrée` sur ordinateur et avec la validation du clavier mobile. Les boutons classiques restent disponibles pour les utilisateurs qui préfèrent la souris ou le toucher. Les contrôles anti-doublon et les validations obligatoires restent actifs.
+
+
+## 15. Assistant de saisie étape par étape
+
+Les formulaires Produit et Commande fonctionnent maintenant comme des assistants. Dans Produits, une seule étape est visible à la fois : nature de l’article, nom, catégorie, prix, unité de stock, conditionnement d’achat, nombre d’unités, seuil et quantités initiales. Le choix de `Bien` ouvre automatiquement le parcours adapté ; les champs de service liés au stock ne sont pas proposés.
+
+Dans Commandes, une seule ligne et une seule étape sont actives à la fois. Pour un bien existant, le parcours est `Produit → Quantité → Prix`. Pour un nouveau bien, le parcours est `Nom → Catégorie → Unité de stock → Conditionnement → Nombre d’unités → Quantité → Prix`. La validation du prix crée directement la ligne suivante et positionne le curseur sur son premier champ.
+
+La touche `Entrée` avance dans le parcours. Dans une commande, `Ctrl + Entrée` sur ordinateur valide directement la commande complète ; sur Mac, utilisez `Cmd + Entrée`. Les boutons restent présents pour les utilisateurs qui préfèrent le clic ou le toucher. Le contrôle des doublons, les champs obligatoires et les conversions de stock restent actifs.
