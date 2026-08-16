@@ -138,3 +138,10 @@ Les formulaires Produit et Commande fonctionnent maintenant comme des assistants
 Dans Commandes, une seule ligne et une seule étape sont actives à la fois. Pour un bien existant, le parcours est `Produit → Quantité → Prix`. Pour un nouveau bien, le parcours est `Nom → Catégorie → Unité de stock → Conditionnement → Nombre d’unités → Quantité → Prix`. La validation du prix crée directement la ligne suivante et positionne le curseur sur son premier champ.
 
 La touche `Entrée` avance dans le parcours. Dans une commande, `Ctrl + Entrée` sur ordinateur valide directement la commande complète ; sur Mac, utilisez `Cmd + Entrée`. Les boutons restent présents pour les utilisateurs qui préfèrent le clic ou le toucher. Le contrôle des doublons, les champs obligatoires et les conversions de stock restent actifs.
+
+
+## 16. Navigation mobile avec Retour et Continuer
+
+Les assistants Produit et Commande disposent maintenant de boutons visibles **← Retour** et **Continuer →**. Le bouton Retour revient à l’étape précédente sans effacer les valeurs déjà saisies. Le bouton Continuer valide l’étape active ; si un champ obligatoire est vide, le téléphone affiche la correction attendue au lieu de perdre la saisie.
+
+À la dernière étape, le bouton Continuer est remplacé par la validation ou par l’ajout de la ligne suivante selon le parcours. Cette navigation ne dépend plus de la présence d’un clavier physique et convient à l’écran tactile du téléphone.
