@@ -1034,29 +1034,18 @@ function viewProduits(){
         <div id="connectionBadge" style="text-align:right;font-size:12px;margin-bottom:8px;"></div>
         <h3>${editObj ? "✎ Modifier l'article" : '➕ Nouvel article'}</h3>
         ${editObj ? `<div class="editing-banner"><span>Modification de ${esc(editObj.nom)}</span><a id="cancelEditProduit">Annuler</a></div>` : ''}
-        <div id="produitWizardProgress" class="helper full">Étape 1 — Choisissez la nature de l’article</div>
+        <div class="helper full">Remplissez les informations principales. Les options de stock avancées sont facultatives.</div>
         <form id="formProduit" class="form-grid">
-          <div class="field full"><label>Nom *</label><input name="nom" required placeholder="Ex : Photo minute" value="${esc(editObj?.nom||'')}"></div>
-          <div class="field">
-            <label>Catégorie</label>
-            <select name="categorie">${CATEGORIES_PRODUITS.map(c=>`<option ${editObj?.categorie===c?'selected':''}>${c}</option>`).join('')}</select>
-          </div>
-          <div class="field">
-            <label>Type *</label>
-            <select name="type">
-              <option value="Service" ${editObj?.type==='Service'?'selected':''}>Service</option>
-              <option value="Bien" ${editObj?.type==='Bien'?'selected':''}>Bien (stock physique)</option>
-            </select>
-          </div>
+          <div class="field full"><label>Nom du produit ou service *</label><input name="nom" required placeholder="Ex : Papier rame A4" value="${esc(editObj?.nom||'')}"></div>
+          <div class="field"><label>Nature *</label><select name="type"><option value="Bien" ${editObj?.type==='Bien'?'selected':''}>Bien</option><option value="Service" ${editObj?.type==='Service'?'selected':''}>Service</option></select></div>
+          <div class="field"><label>Catégorie</label><select name="categorie">${CATEGORIES_PRODUITS.map(c=>`<option ${editObj?.categorie===c?'selected':''}>${c}</option>`).join('')}</select></div>
           <div class="field"><label>Prix de vente (GNF)</label><input name="prix" type="number" min="0" placeholder="0" value="${editObj?.prix||''}"></div>
-          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Unité de stock</label><select name="uniteStock">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${uniteStockInitial===u?'selected':''}>${u}</option>`).join('')}</select><div class="helper">Unité réellement suivie dans le stock et les ventes.</div></div>
-          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Conditionnement d’achat</label><select name="uniteAchat">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${uniteAchatInitial===u?'selected':''}>${u}</option>`).join('')}</select></div>
-          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Nombre d’unités de stock dans le conditionnement</label><input name="facteurAchat" type="number" min="1" step="1" value="${facteurAchatInitial}"></div>
-          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Seuil d'alerte (qté)</label><input name="seuilAlerte" type="number" min="0" placeholder="5" value="${editObj?.seuilAlerte??''}"></div>
-          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Stock initial (${esc(uniteStockInitial)}s)</label><input name="stockInitial" type="number" min="0" placeholder="0" value="${editObj?.stockInitial??''}"></div>
-          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Entrées manuelles (${esc(uniteStockInitial)}s)</label><input name="entrees" type="number" min="0" placeholder="0" value="${editObj?.entrees??''}"></div>
-          <div id="stockHelper" class="helper full">${typeProduitInitial==='Bien' ? `Stock suivi en ${uniteStockInitial}s. Achat : 1 ${uniteAchatInitial} = ${facteurAchatInitial} ${uniteStockInitial}${facteurAchatInitial>1?'s':''}.` : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.'}</div>
-          <div class="btn-row full wizard-actions"><button type="button" id="btnProduitRetour" class="btn btn-ghost">← Retour</button><button type="button" id="btnProduitContinuer" class="btn btn-primary">Continuer →</button><button type="submit" id="btnProduitValider" class="btn btn-primary" style="display:none">${editObj ? 'Enregistrer les modifications' : 'Valider et enregistrer'}</button></div>
+          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Unité suivie en stock</label><select name="uniteStock">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${uniteStockInitial===u?'selected':''}>${u}</option>`).join('')}</select></div>
+          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Achat en</label><select name="uniteAchat">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${uniteAchatInitial===u?'selected':''}>${u}</option>`).join('')}</select></div>
+          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Unités dans 1 achat</label><input name="facteurAchat" type="number" min="1" step="1" value="${facteurAchatInitial}"><div class="helper">Exemple : 1 carton = 5 paquets → saisir 5.</div></div>
+          <div id="stockHelper" class="helper full">${typeProduitInitial==='Bien' ? `Stock : ${uniteStockInitial}. Achat : 1 ${uniteAchatInitial} = ${facteurAchatInitial} ${uniteStockInitial}${facteurAchatInitial>1?'s':''}.` : 'Un service ne demande pas de stock.'}</div>
+          <details class="full"><summary>Options avancées du stock</summary><div class="form-grid"><div class="field stock-field"><label>Seuil d’alerte</label><input name="seuilAlerte" type="number" min="0" placeholder="5" value="${editObj?.seuilAlerte??''}"></div><div class="field stock-field"><label>Stock initial</label><input name="stockInitial" type="number" min="0" placeholder="0" value="${editObj?.stockInitial??''}"></div><div class="field stock-field"><label>Entrées manuelles</label><input name="entrees" type="number" min="0" placeholder="0" value="${editObj?.entrees??''}"></div></div></details>
+          <div class="btn-row full"><button type="submit" class="btn btn-primary">${editObj ? 'Enregistrer les modifications' : 'Ajouter au catalogue'}</button></div>
         </form>
       </div>
       <div>
@@ -1094,46 +1083,19 @@ function attachProduitsHandlers(){
   const stockInputs = f ? [...f.querySelectorAll('[name="seuilAlerte"],[name="stockInitial"],[name="entrees"],[name="facteurAchat"]')] : [];
   const conditionnementInputs = f ? [...f.querySelectorAll('[name="uniteStock"],[name="uniteAchat"]')] : [];
   const stockHelper = document.getElementById('stockHelper');
-  const wizardProgress=document.getElementById('produitWizardProgress');
-  const wizardLabels={type:'Choisissez la nature de l’article',nom:'Saisissez le nom du produit',categorie:'Choisissez la catégorie',prix:'Saisissez le prix de vente',uniteStock:'Choisissez l’unité de stock',uniteAchat:'Choisissez le conditionnement d’achat',facteurAchat:'Indiquez le nombre d’unités dans le conditionnement',seuilAlerte:'Définissez le seuil d’alerte',stockInitial:'Indiquez le stock initial',entrees:'Indiquez les entrées manuelles'};
-  const produitWizardFields=()=>{
-    const names=['type','nom','categorie','prix'];
-    if(typeSelect?.value==='Bien') names.push('uniteStock','uniteAchat','facteurAchat','seuilAlerte','stockInitial','entrees');
-    return names.map(n=>f?.querySelector(`[name="${n}"]`)).filter(Boolean);
-  };
-  let wizardIndex=state.editing.produits ? 1 : 0;
-  function showProduitWizardStep(index,focus=true){
-    const fields=produitWizardFields(); wizardIndex=Math.max(0,Math.min(index,fields.length-1));
-    f?.querySelectorAll('.field').forEach(box=>{ if(!box.classList.contains('stock-field') || typeSelect?.value==='Bien') box.style.display='none'; });
-    const current=fields[wizardIndex]; current?.closest('.field')?.style.setProperty('display','block');
-    if(wizardProgress) wizardProgress.textContent=`Étape ${wizardIndex+1}/${fields.length} — ${wizardLabels[current?.name]||'Saisie en cours'}`;
-    const retour=document.getElementById('btnProduitRetour'); const continuer=document.getElementById('btnProduitContinuer'); const valider=document.getElementById('btnProduitValider');
-    if(retour){ retour.disabled=wizardIndex===0; retour.style.opacity=wizardIndex===0?'0.45':'1'; }
-    if(continuer) continuer.style.display=wizardIndex===fields.length-1?'none':'inline-flex';
-    if(valider) valider.style.display=wizardIndex===fields.length-1?'inline-flex':'none';
-    if(focus) setTimeout(()=>current?.focus(),60);
-  }
-  function advanceProduitWizard(){
-    const fields=produitWizardFields();
-    if(wizardIndex>=fields.length-1) f?.requestSubmit(); else showProduitWizardStep(wizardIndex+1);
-  }
   function syncStockFields(){
     const isBien = typeSelect?.value === 'Bien';
     stockFields.forEach(el=>{ el.style.display = isBien ? '' : 'none'; });
     stockInputs.forEach(input=>{ input.disabled = !isBien; if(!isBien) input.value = '0'; });
     conditionnementInputs.forEach(input=>{ input.disabled = !isBien; if(!isBien) input.value = 'Unité'; });
-    if(stockHelper){ const stock=f?.querySelector('[name="uniteStock"]')?.value||'Unité'; const achat=f?.querySelector('[name="uniteAchat"]')?.value||'Unité'; const facteur=Math.max(1,Number(f?.querySelector('[name="facteurAchat"]')?.value)||1); stockHelper.textContent = isBien ? `Stock suivi en ${stock}s. Achat : 1 ${achat} = ${facteur} ${stock}${facteur>1?'s':''}.` : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.'; }
+    if(stockHelper){ const stock=f?.querySelector('[name="uniteStock"]')?.value||'Unité'; const achat=f?.querySelector('[name="uniteAchat"]')?.value||'Unité'; const facteur=Math.max(1,Number(f?.querySelector('[name="facteurAchat"]')?.value)||1); stockHelper.textContent = isBien ? `Stock : ${stock}. Achat : 1 ${achat} = ${facteur} ${stock}${facteur>1?'s':''}.` : 'Un service ne demande pas de stock.'; }
   }
-  typeSelect?.addEventListener('change', ()=>{ syncStockFields(); showProduitWizardStep(1); });
+  typeSelect?.addEventListener('change', syncStockFields);
   f?.querySelector('[name="uniteStock"]')?.addEventListener('change', syncStockFields);
   f?.querySelector('[name="uniteAchat"]')?.addEventListener('change', syncStockFields);
   f?.querySelector('[name="facteurAchat"]')?.addEventListener('input', syncStockFields);
   syncStockFields();
-  f?.querySelectorAll('select').forEach(el=>el.addEventListener('change',()=>{ if(el.name!=='type') advanceProduitWizard(); }));
-  f?.querySelectorAll('input').forEach(el=>el.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); advanceProduitWizard(); } }));
-  showProduitWizardStep(wizardIndex);
-  document.getElementById('btnProduitRetour')?.addEventListener('click',()=>{ if(wizardIndex>0) showProduitWizardStep(wizardIndex-1); });
-  document.getElementById('btnProduitContinuer')?.addEventListener('click',()=>advanceProduitWizard());
+  setTimeout(()=>f?.querySelector('[name="nom"]')?.focus(),60);
 
   f?.addEventListener('submit', async e=>{
     e.preventDefault();
@@ -1742,7 +1704,7 @@ function commandesProduitsOptions(selected){
 function commandeNouveauBienFields(l,i){
   if(l.produitId!=='__nouveau__') return '';
   const stock=l.uniteStock||'Unité'; const achat=l.uniteAchat||'Unité'; const facteur=Math.max(1,Number(l.facteurAchat)||1);
-  return `<div class="field full commande-nouveau-bien"><label>Nom du nouveau bien *</label><input name="nomManuel" class="commande-nouveau-nom" data-i="${i}" value="${esc(l.nomManuel||'')}" placeholder="Ex : Cartouche HP 305 noire" required></div><div class="field commande-nouveau-bien"><label>Catégorie</label><select name="categorieManuelle" class="commande-nouveau-categorie" data-i="${i}">${CATEGORIES_PRODUITS.map(c=>`<option ${l.categorieManuelle===c?'selected':''}>${c}</option>`).join('')}</select></div><div class="field commande-nouveau-bien"><label>Unité de stock</label><select name="uniteStockManuel" class="commande-nouveau-stock" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${stock===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field commande-nouveau-bien"><label>Conditionnement d’achat</label><select name="uniteAchatManuel" class="commande-nouveau-unite" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${achat===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field commande-nouveau-bien"><label>Nombre d’unités de stock dans le conditionnement</label><input name="facteurAchatManuel" class="commande-nouveau-facteur" data-i="${i}" type="number" min="1" step="1" value="${facteur}" required></div>`;
+  return `<div class="field full commande-nouveau-bien"><label>Nom du nouveau bien *</label><input name="nomManuel" class="commande-nouveau-nom" data-i="${i}" value="${esc(l.nomManuel||'')}" placeholder="Ex : Cartouche HP 305 noire" required></div><details class="full commande-nouveau-bien"><summary>Catégorie et conditionnement facultatifs</summary><div class="form-grid"><div class="field"><label>Catégorie</label><select name="categorieManuelle" class="commande-nouveau-categorie" data-i="${i}">${CATEGORIES_PRODUITS.map(c=>`<option ${l.categorieManuelle===c?'selected':''}>${c}</option>`).join('')}</select></div><div class="field"><label>Unité de stock</label><select name="uniteStockManuel" class="commande-nouveau-stock" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${stock===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field"><label>Achat en</label><select name="uniteAchatManuel" class="commande-nouveau-unite" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${achat===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field"><label>Unités dans 1 achat</label><input name="facteurAchatManuel" class="commande-nouveau-facteur" data-i="${i}" type="number" min="1" step="1" value="${facteur}" required></div></div></details>`;
 }
 function viewCommandes(){
   const editObj=state.editing.commandes ? state.commandes.find(c=>c.id===state.editing.commandes) : null;
@@ -1758,14 +1720,14 @@ function viewCommandes(){
     <div class="content-grid">
       <div class="card"><h3>${editObj?'✎ Modifier le brouillon':'➕ Nouvelle commande'}</h3>
         ${editObj?`<div class="editing-banner"><span>Modification de ${esc(editObj.numero)}</span><a id="cancelEditCommande">Annuler</a></div>`:''}
-        <div id="commandeWizardProgress" class="helper full">Étape 1 — Choisissez le premier bien à commander</div>
+        <div class="helper full">Choisissez le fournisseur, ajoutez les biens, puis indiquez simplement la quantité et le prix.</div>
         <form id="formCommande" class="form-grid">
           <div class="field"><label>Date</label><input name="date" type="date" required value="${commandeFormTmp.date||todayISO()}"></div>
           <div class="field"><label>Fournisseur *</label><select name="fournisseurId" required>${fournisseurOptions}</select></div>
           <div id="commandeLignes" class="full">${lignes.map((l,i)=>{ const p=l.produitId&&l.produitId!=='__nouveau__'?produitById(l.produitId):null; const unite=p?uniteAchat(p):(l.uniteAchat||'Unité'); const stock=p?uniteStock(p):(l.uniteStock||'Unité'); const facteur=p?facteurAchat(p):Math.max(1,Number(l.facteurAchat)||1); return `<div class="lignes-row commande-ligne" data-i="${i}"><div class="field"><label>${i===0?'Produit (bien)':''}</label><select name="produitId" class="commande-produit" data-i="${i}" required>${commandesProduitsOptions(l.produitId)}</select></div>${commandeNouveauBienFields(l)}<div class="field"><label>${i===0?`Qté (${esc(unite)})`:''}</label><input name="quantite" class="commande-qte" data-i="${i}" type="number" min="1" value="${l.quantite||1}" required><div class="helper">1 ${esc(unite)} = ${facteur} ${esc(stock)}${facteur>1?'s':''} en stock</div></div><div class="field"><label>${i===0?'Prix achat / '+esc(unite):''}</label><input name="prixUnitaire" class="commande-prix" data-i="${i}" type="number" min="0" value="${l.prixUnitaire||0}" required></div><button type="button" class="row-del" data-remove-ligne="${i}" title="Retirer">✕</button></div>`; }).join('')}</div>
           <button type="button" id="btnAddCommandeLigne" class="btn btn-ghost full">+ Ajouter un bien</button>
-          <div class="field full"><label>Observations</label><textarea name="observations" placeholder="Délai, conditions, remarques…">${esc(commandeFormTmp.observations||'')}</textarea></div>
-          <div class="btn-row full wizard-actions"><button type="button" id="btnCommandeRetour" class="btn btn-ghost">← Retour</button><button type="button" id="btnCommandeContinuer" class="btn btn-primary">Continuer →</button><button class="btn btn-primary" id="btnCommandeValider" type="submit">${editObj?'Valider les modifications':'Valider la commande'}</button></div>
+          <details class="full"><summary>Observations facultatives</summary><textarea name="observations" placeholder="Délai, conditions, remarques…">${esc(commandeFormTmp.observations||'')}</textarea></details>
+          <div class="btn-row full"><button class="btn btn-primary" type="submit">${editObj?'Enregistrer les modifications':'Enregistrer la commande'}</button></div>
         </form>
       </div>
       <div><div class="section-divider">Historique des commandes</div>
@@ -1826,12 +1788,9 @@ function attachCommandesHandlers(){
   function showCommandeWizard(i=commandeWizardLine,step=commandeWizardStep,focus=true){
     commandeWizardLine=i; commandeWizardStep=step;
     const fields=commandeWizardFields(i); commandeWizardStep=Math.max(0,Math.min(step,fields.length-1));
-    document.querySelectorAll('.commande-ligne').forEach((row,j)=>{ row.style.display=j===i?'grid':'none'; row.querySelectorAll('.field').forEach(box=>box.style.display='none'); row.querySelector('.row-del')?.style.setProperty('display','none'); });
-    const row=document.querySelector(`.commande-ligne[data-i="${i}"]`); const current=row?.querySelector(fields[commandeWizardStep]); current?.closest('.field')?.style.setProperty('display','block');
-    if(commandeProgress) commandeProgress.textContent=`Ligne ${i+1} · Étape ${commandeWizardStep+1}/${fields.length} — ${current?.previousElementSibling?.textContent||'Saisie de la ligne'}`;
-    const retour=document.getElementById('btnCommandeRetour'); const continuer=document.getElementById('btnCommandeContinuer');
-    if(retour){ retour.disabled=i===0&&commandeWizardStep===0; retour.style.opacity=retour.disabled?'0.45':'1'; }
-    if(continuer) continuer.textContent=commandeWizardStep===fields.length-1?'Ajouter un autre produit →':'Continuer →';
+    document.querySelectorAll('.commande-ligne').forEach((row,j)=>{ row.style.display=j===i?'grid':'none'; row.querySelectorAll('.field').forEach(box=>box.style.display=''); row.querySelector('.row-del')?.style.setProperty('display','inline-flex'); });
+    const row=document.querySelector(`.commande-ligne[data-i="${i}"]`); const current=row?.querySelector(fields[commandeWizardStep]);
+    if(commandeProgress) commandeProgress.textContent='Ajoutez un bien, puis indiquez la quantité et le prix.';
     if(focus) setTimeout(()=>current?.focus(),60);
   }
   const avancerCommande=(i)=>{ const fields=commandeWizardFields(i); const row=document.querySelector(`.commande-ligne[data-i="${i}"]`); const current=row?.querySelector(fields[commandeWizardStep]); if(current && !current.checkValidity()){ current.reportValidity(); return; } if(commandeWizardStep<fields.length-1) showCommandeWizard(i,commandeWizardStep+1); else ajouterLigneEtFocus(); };

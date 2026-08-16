@@ -145,3 +145,12 @@ La touche `Entrée` avance dans le parcours. Dans une commande, `Ctrl + Entrée`
 Les assistants Produit et Commande disposent maintenant de boutons visibles **← Retour** et **Continuer →**. Le bouton Retour revient à l’étape précédente sans effacer les valeurs déjà saisies. Le bouton Continuer valide l’étape active ; si un champ obligatoire est vide, le téléphone affiche la correction attendue au lieu de perdre la saisie.
 
 À la dernière étape, le bouton Continuer est remplacé par la validation ou par l’ajout de la ligne suivante selon le parcours. Cette navigation ne dépend plus de la présence d’un clavier physique et convient à l’écran tactile du téléphone.
+
+
+## 17. Interface simplifiée
+
+La saisie Produit a été simplifiée : les informations principales sont désormais le nom, la nature, la catégorie, le prix et, pour un bien, l’unité suivie en stock, le mode d’achat et le nombre d’unités dans un achat. Le seuil d’alerte, le stock initial et les entrées manuelles sont regroupés dans **Options avancées du stock** et peuvent rester inchangés pour une première saisie.
+
+La saisie Commande affiche le fournisseur et une ligne simple avec le bien, la quantité et le prix. Les informations de conditionnement d’un nouveau bien sont regroupées dans une zone facultative. Les observations sont également facultatives. La logique de conversion, les contrôles anti-doublon, les réceptions et les mouvements de stock restent inchangés en arrière-plan.
+
+Pour le papier, l’utilisation courante se résume à : créer le produit `Papier rame A4`, choisir `Paquet` comme unité suivie en stock, choisir `Carton` dans `Achat en`, saisir `5` dans `Unités dans 1 achat`, puis enregistrer. Dans une commande, choisir le fournisseur, choisir le papier, saisir la quantité de cartons et le prix d’un carton.
