@@ -669,9 +669,11 @@ function clientById(id){ return state.clients.find(c=>c.id===id); }
 function sortiesFor(produitId){
   return state.ventes.filter(v=>v.produitId===produitId).reduce((s,v)=>s+Number(v.quantite||0),0);
 }
+function uniteStock(p){ return p?.uniteStock || 'Unité'; }
 function uniteAchat(p){ return p?.uniteAchat || 'Unité'; }
 function facteurAchat(p){ return Math.max(1, Number(p?.facteurAchat)||1); }
-function libelleConditionnement(p){ const u=uniteAchat(p); const f=facteurAchat(p); return f>1 ? `${u} · 1 ${u} = ${f} unité${f>1?'s':''}` : u; }
+function libelleConditionnement(p){ const achat=uniteAchat(p); const stock=uniteStock(p); const facteur=facteurAchat(p); return facteur>1 ? `${achat} · 1 ${achat} = ${facteur} ${stock}${facteur>1?'s':''}` : achat; }
+function libelleStock(p,quantite){ const q=Number(quantite); const u=uniteStock(p); return `${q} ${u}${q===1?'':'s'}`; }
 function stockActuel(p){
   if(!p || p.type==='Service') return null;
   const ventes = sortiesFor(p.id);
@@ -1016,6 +1018,7 @@ function viewProduits(){
   const editId = state.editing.produits;
   const editObj = editId ? state.produits.find(p=>p.id===editId) : null;
   const typeProduitInitial = editObj?.type || 'Service';
+  const uniteStockInitial = editObj?.uniteStock || 'Unité';
   const uniteAchatInitial = editObj?.uniteAchat || 'Unité';
   const facteurAchatInitial = Math.max(1, Number(editObj?.facteurAchat)||1);
   const q = (state.search.produits||'').toLowerCase();
@@ -1045,12 +1048,13 @@ function viewProduits(){
             </select>
           </div>
           <div class="field"><label>Prix de vente (GNF)</label><input name="prix" type="number" min="0" placeholder="0" value="${editObj?.prix||''}"></div>
-          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Unité d’achat</label><select name="uniteAchat">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${uniteAchatInitial===u?'selected':''}>${u}</option>`).join('')}</select></div>
-          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Unités de stock par conditionnement</label><input name="facteurAchat" type="number" min="1" step="1" value="${facteurAchatInitial}"></div>
+          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Unité de stock</label><select name="uniteStock">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${uniteStockInitial===u?'selected':''}>${u}</option>`).join('')}</select><div class="helper">Unité réellement suivie dans le stock et les ventes.</div></div>
+          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Conditionnement d’achat</label><select name="uniteAchat">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${uniteAchatInitial===u?'selected':''}>${u}</option>`).join('')}</select></div>
+          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Nombre d’unités de stock dans le conditionnement</label><input name="facteurAchat" type="number" min="1" step="1" value="${facteurAchatInitial}"></div>
           <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Seuil d'alerte (qté)</label><input name="seuilAlerte" type="number" min="0" placeholder="5" value="${editObj?.seuilAlerte??''}"></div>
-          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Stock initial (unités de stock)</label><input name="stockInitial" type="number" min="0" placeholder="0" value="${editObj?.stockInitial??''}"></div>
-          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Entrées manuelles (unités de stock)</label><input name="entrees" type="number" min="0" placeholder="0" value="${editObj?.entrees??''}"></div>
-          <div id="stockHelper" class="helper full">${typeProduitInitial==='Bien' ? `Ce bien est suivi en unités de stock. Achat : 1 ${uniteAchatInitial} = ${facteurAchatInitial} unité(s) de stock.` : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.'}</div>
+          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Stock initial (${esc(uniteStockInitial)}s)</label><input name="stockInitial" type="number" min="0" placeholder="0" value="${editObj?.stockInitial??''}"></div>
+          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Entrées manuelles (${esc(uniteStockInitial)}s)</label><input name="entrees" type="number" min="0" placeholder="0" value="${editObj?.entrees??''}"></div>
+          <div id="stockHelper" class="helper full">${typeProduitInitial==='Bien' ? `Stock suivi en ${uniteStockInitial}s. Achat : 1 ${uniteAchatInitial} = ${facteurAchatInitial} ${uniteStockInitial}${facteurAchatInitial>1?'s':''}.` : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.'}</div>
           <div class="btn-row full"><button type="submit" class="btn btn-primary">${editObj ? 'Enregistrer les modifications' : 'Ajouter au catalogue'}</button></div>
         </form>
       </div>
@@ -1068,12 +1072,12 @@ function renderProduitsList(list){
     ${list.map(p=>{
       const statut = statutStock(p);
       const pillClass = statut==='RUPTURE'?'pill-danger':statut==='FAIBLE'?'pill-warn':statut==='Service'?'pill-neutral':'pill-ok';
-      const stockTxt = p.type==='Service' ? 'Service' : `Stock : ${stockActuel(p)}`;
+      const stockTxt = p.type==='Service' ? 'Service' : `Stock : ${libelleStock(p,stockActuel(p))}`;
       return `
       <div class="row-item">
         <div class="row-main">
           <div class="row-title">${esc(p.nom)}</div>
-          <div class="row-meta">${esc(p.categorie||'—')} · ${stockTxt}${p.type==='Bien'?` · Achat : ${esc(libelleConditionnement(p))}`:''} · ${p.prix?fmtGNF(p.prix):'Prix non défini'}</div>
+          <div class="row-meta">${esc(p.categorie||'—')} · ${stockTxt}${p.type==='Bien'?` · Stock suivi en ${esc(uniteStock(p))} · Achat : ${esc(libelleConditionnement(p))}`:''} · ${p.prix?fmtGNF(p.prix):'Prix non défini'}</div>
         </div>
         <span class="pill ${p.actif===false?'pill-neutral':pillClass}">${p.actif===false?'Archivé':statut}</span>
         <button class="row-edit" data-edit-produit="${p.id}" title="Modifier">✎</button>
@@ -1087,19 +1091,35 @@ function attachProduitsHandlers(){
   const typeSelect = f?.querySelector('[name="type"]');
   const stockFields = f ? [...f.querySelectorAll('.stock-field')] : [];
   const stockInputs = f ? [...f.querySelectorAll('[name="seuilAlerte"],[name="stockInitial"],[name="entrees"],[name="facteurAchat"]')] : [];
-  const conditionnementInputs = f ? [...f.querySelectorAll('[name="uniteAchat"]')] : [];
+  const conditionnementInputs = f ? [...f.querySelectorAll('[name="uniteStock"],[name="uniteAchat"]')] : [];
   const stockHelper = document.getElementById('stockHelper');
   function syncStockFields(){
     const isBien = typeSelect?.value === 'Bien';
     stockFields.forEach(el=>{ el.style.display = isBien ? '' : 'none'; });
     stockInputs.forEach(input=>{ input.disabled = !isBien; if(!isBien) input.value = '0'; });
     conditionnementInputs.forEach(input=>{ input.disabled = !isBien; if(!isBien) input.value = 'Unité'; });
-    if(stockHelper){ const u=f?.querySelector('[name="uniteAchat"]')?.value||'Unité'; const facteur=Math.max(1,Number(f?.querySelector('[name="facteurAchat"]')?.value)||1); stockHelper.textContent = isBien ? `Ce bien est suivi en unités de stock. Achat : 1 ${u} = ${facteur} unité(s) de stock.` : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.'; }
+    if(stockHelper){ const stock=f?.querySelector('[name="uniteStock"]')?.value||'Unité'; const achat=f?.querySelector('[name="uniteAchat"]')?.value||'Unité'; const facteur=Math.max(1,Number(f?.querySelector('[name="facteurAchat"]')?.value)||1); stockHelper.textContent = isBien ? `Stock suivi en ${stock}s. Achat : 1 ${achat} = ${facteur} ${stock}${facteur>1?'s':''}.` : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.'; }
   }
-  typeSelect?.addEventListener('change', syncStockFields);
+  typeSelect?.addEventListener('change', ()=>{ syncStockFields(); if(!state.editing.produits) setTimeout(()=>f?.querySelector('[name="nom"]')?.focus(),60); });
+  f?.querySelector('[name="uniteStock"]')?.addEventListener('change', syncStockFields);
   f?.querySelector('[name="uniteAchat"]')?.addEventListener('change', syncStockFields);
   f?.querySelector('[name="facteurAchat"]')?.addEventListener('input', syncStockFields);
   syncStockFields();
+  const produitFocusOrder = ()=>{
+    const names = ['nom','categorie','type','prix'];
+    if(typeSelect?.value==='Bien') names.push('uniteStock','uniteAchat','facteurAchat','seuilAlerte','stockInitial','entrees');
+    return names.map(n=>f?.querySelector(`[name="${n}"]`)).filter(Boolean);
+  };
+  f?.querySelectorAll('input,select,textarea').forEach(el=>el.addEventListener('keydown', e=>{
+    if(e.key!=='Enter' || el.tagName==='TEXTAREA') return;
+    e.preventDefault();
+    const fields=produitFocusOrder(); const i=fields.indexOf(el); const next=fields[i+1];
+    if(next) next.focus(); else f?.requestSubmit();
+  }));
+  setTimeout(()=>{
+    const initial=state.editing.produits ? f?.querySelector('[name="nom"]') : typeSelect;
+    initial?.focus();
+  },60);
   f?.addEventListener('submit', async e=>{
     e.preventDefault();
     const fd = new FormData(f);
@@ -1114,6 +1134,7 @@ function attachProduitsHandlers(){
       seuilAlerte: estBien ? (Number(fd.get('seuilAlerte'))||5) : 0,
       stockInitial: estBien ? (Number(fd.get('stockInitial'))||0) : 0,
       entrees: estBien ? (Number(fd.get('entrees'))||0) : 0,
+      uniteStock: estBien ? (fd.get('uniteStock')||'Unité') : 'Unité',
       uniteAchat: estBien ? (fd.get('uniteAchat')||'Unité') : 'Unité',
       facteurAchat: estBien ? Math.max(1, Number(fd.get('facteurAchat'))||1) : 1
     };
@@ -1128,6 +1149,7 @@ function attachProduitsHandlers(){
     }
     await persist('produits', editId ? 'modification' : 'creation');
     render();
+    if(!editId) setTimeout(()=>document.querySelector('#formProduit [name="nom"]')?.focus(),150);
   });
   document.getElementById('cancelEditProduit')?.addEventListener('click', ()=>{ state.editing.produits=null; render(); });
   document.querySelectorAll('[data-edit-produit]').forEach(b=>{
@@ -1197,7 +1219,7 @@ function viewVentes(){
           <div class="field"><label>Date</label><input name="date" type="date" value="${editObj?.date||todayISO()}" required></div>
           <div class="field"><label>Client</label><select name="clientId">${clientOptions}</select></div>
           <div class="field full"><label>Produit / Service *</label><select name="produitId" id="venteProduit" required>${produitOptions}</select></div>
-          <div class="field"><label>Quantité (unité de stock) *</label><input name="quantite" type="number" min="1" value="${editObj?.quantite||1}" required><div id="venteStockHelper" class="helper">${editProduit?.type==='Bien'?`Stock disponible : ${stockActuel(editProduit)} unité(s). Achat habituel : ${esc(libelleConditionnement(editProduit))}.`:'Les services ne sont pas stockés.'}</div></div>
+          <div class="field"><label>Quantité (unité de stock) *</label><input name="quantite" type="number" min="1" value="${editObj?.quantite||1}" required><div id="venteStockHelper" class="helper">${editProduit?.type==='Bien'?`Stock disponible : ${esc(libelleStock(editProduit,stockActuel(editProduit)))}. Achat habituel : ${esc(libelleConditionnement(editProduit))}.`:'Les services ne sont pas stockés.'}</div></div>
           <div class="field"><label>Prix unitaire (GNF)</label><input name="prixUnitaire" id="ventePrix" type="number" min="0" placeholder="0" value="${editObj?.prixUnitaire??''}"></div>
           <div class="field">
             <label>Mode de paiement</label>
@@ -1228,7 +1250,7 @@ function renderVentesList(list){
       <div class="row-item">
         <div class="row-main">
           <div class="row-title">${esc(p?p.nom:'—')} ${statut}</div>
-          <div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)} · ${esc(v.modePaiement)} · Réglé ${fmtGNF(montantRegle(v))} / ${fmtGNF(ventesTotal(v))} · Qté ${v.quantite} unité(s) de stock</div>
+          <div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)} · ${esc(v.modePaiement)} · Réglé ${fmtGNF(montantRegle(v))} / ${fmtGNF(ventesTotal(v))} · Qté ${v.quantite} ${esc(uniteStock(p))}</div>
         </div>
         <div class="row-amount">${fmtGNF(ventesTotal(v))}</div>
         ${montantRegle(v)<=0 ? `<button class="row-edit" data-edit-vente="${v.id}" title="Modifier">✎</button>` : `<span class="helper" title="Vente protégée après règlement">🔒</span>`}
@@ -1245,7 +1267,7 @@ function attachVentesHandlers(){
     const opt = selProduit.selectedOptions[0];
     const prix = opt?.dataset?.prix;
     if(prix!==undefined) inputPrix.value = prix;
-    const p=produitById(selProduit.value); const helper=document.getElementById('venteStockHelper'); if(helper) helper.textContent=p?.type==='Bien'?`Stock disponible : ${stockActuel(p)} unité(s). Achat habituel : ${libelleConditionnement(p)}.`:'Les services ne sont pas stockés.';
+    const p=produitById(selProduit.value); const helper=document.getElementById('venteStockHelper'); if(helper) helper.textContent=p?.type==='Bien'?`Stock disponible : ${libelleStock(p,stockActuel(p))}. Achat habituel : ${libelleConditionnement(p)}.`:'Les services ne sont pas stockés.';
   });
   const f = document.getElementById('formVente');
   f?.addEventListener('submit', async e=>{
@@ -1698,12 +1720,12 @@ let commandeLignesTmp = [{produitId:'',quantite:1,prixUnitaire:0}];
 let commandeFormTmp = {fournisseurId:'', date:'', observations:''};
 function commandesProduitsOptions(selected){
   const biens=state.produits.filter(p=>p.type==='Bien' && p.actif!==false).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
-  return `<option value="">— Choisir un bien —</option>`+biens.map(p=>`<option value="${p.id}" ${selected===p.id?'selected':''}>${esc(p.nom)} · ${esc(uniteAchat(p))} · stock ${stockActuel(p)}</option>`).join('')+`<option value="__nouveau__" ${selected==='__nouveau__'?'selected':''}>＋ Nouveau bien absent du catalogue</option>`;
+  return `<option value="">— Choisir un bien —</option>`+biens.map(p=>`<option value="${p.id}" ${selected===p.id?'selected':''}>${esc(p.nom)} · achat : ${esc(uniteAchat(p))} · 1 = ${facteurAchat(p)} ${esc(uniteStock(p))}</option>`).join('')+`<option value="__nouveau__" ${selected==='__nouveau__'?'selected':''}>＋ Nouveau bien absent du catalogue</option>`;
 }
 function commandeNouveauBienFields(l,i){
   if(l.produitId!=='__nouveau__') return '';
-  const unite=l.uniteAchat||'Unité'; const facteur=Math.max(1,Number(l.facteurAchat)||1);
-  return `<div class="field full commande-nouveau-bien"><label>Nom du nouveau bien *</label><input name="nomManuel" class="commande-nouveau-nom" data-i="${i}" value="${esc(l.nomManuel||'')}" placeholder="Ex : Cartouche HP 305 noire" required></div><div class="field commande-nouveau-bien"><label>Catégorie</label><select name="categorieManuelle" class="commande-nouveau-categorie" data-i="${i}">${CATEGORIES_PRODUITS.map(c=>`<option ${l.categorieManuelle===c?'selected':''}>${c}</option>`).join('')}</select></div><div class="field commande-nouveau-bien"><label>Unité d’achat</label><select name="uniteAchatManuel" class="commande-nouveau-unite" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${unite===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field commande-nouveau-bien"><label>Unités de stock par conditionnement</label><input name="facteurAchatManuel" class="commande-nouveau-facteur" data-i="${i}" type="number" min="1" step="1" value="${facteur}" required></div>`;
+  const stock=l.uniteStock||'Unité'; const achat=l.uniteAchat||'Unité'; const facteur=Math.max(1,Number(l.facteurAchat)||1);
+  return `<div class="field full commande-nouveau-bien"><label>Nom du nouveau bien *</label><input name="nomManuel" class="commande-nouveau-nom" data-i="${i}" value="${esc(l.nomManuel||'')}" placeholder="Ex : Cartouche HP 305 noire" required></div><div class="field commande-nouveau-bien"><label>Catégorie</label><select name="categorieManuelle" class="commande-nouveau-categorie" data-i="${i}">${CATEGORIES_PRODUITS.map(c=>`<option ${l.categorieManuelle===c?'selected':''}>${c}</option>`).join('')}</select></div><div class="field commande-nouveau-bien"><label>Unité de stock</label><select name="uniteStockManuel" class="commande-nouveau-stock" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${stock===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field commande-nouveau-bien"><label>Conditionnement d’achat</label><select name="uniteAchatManuel" class="commande-nouveau-unite" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${achat===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field commande-nouveau-bien"><label>Nombre d’unités de stock dans le conditionnement</label><input name="facteurAchatManuel" class="commande-nouveau-facteur" data-i="${i}" type="number" min="1" step="1" value="${facteur}" required></div>`;
 }
 function viewCommandes(){
   const editObj=state.editing.commandes ? state.commandes.find(c=>c.id===state.editing.commandes) : null;
@@ -1722,7 +1744,7 @@ function viewCommandes(){
         <form id="formCommande" class="form-grid">
           <div class="field"><label>Date</label><input name="date" type="date" required value="${commandeFormTmp.date||todayISO()}"></div>
           <div class="field"><label>Fournisseur *</label><select name="fournisseurId" required>${fournisseurOptions}</select></div>
-          <div id="commandeLignes" class="full">${lignes.map((l,i)=>{ const p=l.produitId&&l.produitId!=='__nouveau__'?produitById(l.produitId):null; const unite=p?uniteAchat(p):(l.uniteAchat||'Unité'); const facteur=p?facteurAchat(p):Math.max(1,Number(l.facteurAchat)||1); return `<div class="lignes-row commande-ligne" data-i="${i}"><div class="field"><label>${i===0?'Produit (bien)':''}</label><select name="produitId" class="commande-produit" data-i="${i}" required>${commandesProduitsOptions(l.produitId)}</select></div>${commandeNouveauBienFields(l)}<div class="field"><label>${i===0?`Qté (${esc(unite)})`:''}</label><input name="quantite" class="commande-qte" data-i="${i}" type="number" min="1" value="${l.quantite||1}" required><div class="helper">1 ${esc(unite)} = ${facteur} unité(s) de stock</div></div><div class="field"><label>${i===0?'Prix achat / '+esc(unite):''}</label><input name="prixUnitaire" class="commande-prix" data-i="${i}" type="number" min="0" value="${l.prixUnitaire||0}" required></div><button type="button" class="row-del" data-remove-ligne="${i}" title="Retirer">✕</button></div>`; }).join('')}</div>
+          <div id="commandeLignes" class="full">${lignes.map((l,i)=>{ const p=l.produitId&&l.produitId!=='__nouveau__'?produitById(l.produitId):null; const unite=p?uniteAchat(p):(l.uniteAchat||'Unité'); const stock=p?uniteStock(p):(l.uniteStock||'Unité'); const facteur=p?facteurAchat(p):Math.max(1,Number(l.facteurAchat)||1); return `<div class="lignes-row commande-ligne" data-i="${i}"><div class="field"><label>${i===0?'Produit (bien)':''}</label><select name="produitId" class="commande-produit" data-i="${i}" required>${commandesProduitsOptions(l.produitId)}</select></div>${commandeNouveauBienFields(l)}<div class="field"><label>${i===0?`Qté (${esc(unite)})`:''}</label><input name="quantite" class="commande-qte" data-i="${i}" type="number" min="1" value="${l.quantite||1}" required><div class="helper">1 ${esc(unite)} = ${facteur} ${esc(stock)}${facteur>1?'s':''} en stock</div></div><div class="field"><label>${i===0?'Prix achat / '+esc(unite):''}</label><input name="prixUnitaire" class="commande-prix" data-i="${i}" type="number" min="0" value="${l.prixUnitaire||0}" required></div><button type="button" class="row-del" data-remove-ligne="${i}" title="Retirer">✕</button></div>`; }).join('')}</div>
           <button type="button" id="btnAddCommandeLigne" class="btn btn-ghost full">+ Ajouter un bien</button>
           <div class="field full"><label>Observations</label><textarea name="observations" placeholder="Délai, conditions, remarques…">${esc(commandeFormTmp.observations||'')}</textarea></div>
           <div class="btn-row full"><button class="btn btn-primary" type="submit">${editObj?'Enregistrer les modifications':'Enregistrer le brouillon'}</button></div>
@@ -1735,13 +1757,13 @@ function viewCommandes(){
 }
 function imprimerCommande(id){
   const c=state.commandes.find(x=>x.id===id); if(!c)return; const f=fournisseurById(c.fournisseurId); const w=window.open('','_blank'); if(!w){showToast('Autorisez les fenêtres pop-up pour imprimer');return;}
-  w.document.write(`<html><head><title>${esc(c.numero)}</title><style>body{font-family:Arial,sans-serif;color:#152036;padding:28px;max-width:800px;margin:auto}h1{color:#132C54}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}th:last-child,td:last-child{text-align:right}.meta{color:#657089;line-height:1.7}.total{text-align:right;font-size:18px;font-weight:bold;margin-top:18px}</style></head><body><h1>${esc(state.parametres.nom)}</h1><h2>Bon de commande ${esc(c.numero)}</h2><div class="meta">Date : ${fmtDate(c.date)}<br>Fournisseur : ${esc(f?f.nom:'—')}<br>${esc(f?.telephone||'')} ${esc(f?.adresse||'')}</div><table><thead><tr><th>Produit</th><th>Quantité</th><th>Prix unitaire</th><th>Total</th></tr></thead><tbody>${c.lignes.map(l=>`<tr><td>${esc(l.nom||produitById(l.produitId)?.nom||'—')}</td><td>${l.quantite} ${esc(l.uniteAchat||uniteAchat(produitById(l.produitId)))}</td><td>${fmtGNF(l.prixUnitaire)}</td><td>${fmtGNF(Number(l.quantite||0)*Number(l.prixUnitaire||0))}</td></tr>`).join('')}</tbody></table><div class="total">Total : ${fmtGNF(commandeTotal(c))}</div><p class="meta">${esc(c.observations||'')}</p></body></html>`); w.document.close(); w.focus(); setTimeout(()=>w.print(),250);}
+  w.document.write(`<html><head><title>${esc(c.numero)}</title><style>body{font-family:Arial,sans-serif;color:#152036;padding:28px;max-width:800px;margin:auto}h1{color:#132C54}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}th:last-child,td:last-child{text-align:right}.meta{color:#657089;line-height:1.7}.total{text-align:right;font-size:18px;font-weight:bold;margin-top:18px}</style></head><body><h1>${esc(state.parametres.nom)}</h1><h2>Bon de commande ${esc(c.numero)}</h2><div class="meta">Date : ${fmtDate(c.date)}<br>Fournisseur : ${esc(f?f.nom:'—')}<br>${esc(f?.telephone||'')} ${esc(f?.adresse||'')}</div><table><thead><tr><th>Produit</th><th>Quantité achetée</th><th>Équivalent stock</th><th>Prix unitaire</th><th>Total</th></tr></thead><tbody>${c.lignes.map(l=>{const p=produitById(l.produitId);const achat=l.uniteAchat||uniteAchat(p);const stock=l.uniteStock||uniteStock(p);const facteur=Math.max(1,Number(l.facteurAchat)||facteurAchat(p));return `<tr><td>${esc(l.nom||p?.nom||'—')}</td><td>${l.quantite} ${esc(achat)}</td><td>${Number(l.quantite||0)*facteur} ${esc(stock)}</td><td>${fmtGNF(l.prixUnitaire)}</td><td>${fmtGNF(Number(l.quantite||0)*Number(l.prixUnitaire||0))}</td></tr>`;}).join('')}</tbody></table><div class="total">Total : ${fmtGNF(commandeTotal(c))}</div><p class="meta">${esc(c.observations||'')}</p></body></html>`); w.document.close(); w.focus(); setTimeout(()=>w.print(),250);}
 async function receptionnerCommande(id){
   const c=state.commandes.find(x=>x.id===id); if(!c)return;
   for(const l of c.lignes){ const p=produitById(l.produitId); const reste=Math.max(0,Number(l.quantite||0)-Number(l.quantiteRecue||0)); if(!p||reste<=0)continue;
-    const unite=l.uniteAchat||uniteAchat(p); const facteur=Math.max(1,Number(l.facteurAchat)||facteurAchat(p)); const rep=await customPrompt(`Quantité reçue pour ${p.nom} en ${unite} (reste ${reste} ${unite})`,{title:'Réception partielle',defaultValue:String(reste),type:'number',okText:'Enregistrer'}); if(rep===null)continue;
+    const achat=l.uniteAchat||uniteAchat(p); const stock=l.uniteStock||uniteStock(p); const facteur=Math.max(1,Number(l.facteurAchat)||facteurAchat(p)); const rep=await customPrompt(`Quantité reçue pour ${p.nom} en ${achat} (reste ${reste} ${achat}) — le stock sera augmenté de ${facteur} ${stock} par ${achat}`,{title:'Réception partielle',defaultValue:String(reste),type:'number',okText:'Enregistrer'}); if(rep===null)continue;
     const q=Math.floor(Number(rep)); if(!Number.isFinite(q)||q<0||q>reste){showToast(`Quantité invalide pour ${p.nom}`);continue;}
-    const base=q*facteur; l.quantiteRecue=(Number(l.quantiteRecue)||0)+q; p.entrees=(Number(p.entrees)||0)+base; enregistrerMouvementStock({produitId:p.id,quantite:base,type:'Réception',reference:c.id,notes:`${q} ${unite} × ${facteur} unité(s) de stock`});
+    const base=q*facteur; l.quantiteRecue=(Number(l.quantiteRecue)||0)+q; p.entrees=(Number(p.entrees)||0)+base; enregistrerMouvementStock({produitId:p.id,quantite:base,type:'Réception',reference:c.id,notes:`${q} ${achat} × ${facteur} ${stock}`});
   }
   c.statut=commandeReste(c)<=0?'Réceptionnée':'Réception partielle'; c.dateDerniereReception=todayISO();
   await persist('produits','modification'); await persist('commandes','modification'); await persist('mouvementsStock','creation'); showToast('Réception enregistrée'); render();
@@ -1764,7 +1786,7 @@ async function annulerCommande(id){
   const c=state.commandes.find(x=>x.id===id); if(!c || c.statut==='Annulée') return;
   if(!await customConfirm('Annuler cette commande ? Les quantités déjà réceptionnées seront retirées du stock et la sortie de trésorerie sera neutralisée.',{title:'Annulation de commande',okText:'Annuler la commande',danger:true}))return;
   let stockModifie=false;
-  for(const l of c.lignes||[]){ const q=Math.max(0,Number(l.quantiteRecue||0)); const p=produitById(l.produitId); if(!p||!q)continue; const unite=l.uniteAchat||uniteAchat(p); const facteur=Math.max(1,Number(l.facteurAchat)||facteurAchat(p)); const base=q*facteur; p.entrees=Math.max(0,Number(p.entrees||0)-base); enregistrerMouvementStock({produitId:p.id,quantite:-base,type:'Annulation réception',reference:c.id,notes:`Annulation de ${q} ${unite} × ${facteur} unité(s)`}); stockModifie=true; }
+  for(const l of c.lignes||[]){ const q=Math.max(0,Number(l.quantiteRecue||0)); const p=produitById(l.produitId); if(!p||!q)continue; const achat=l.uniteAchat||uniteAchat(p); const stock=l.uniteStock||uniteStock(p); const facteur=Math.max(1,Number(l.facteurAchat)||facteurAchat(p)); const base=q*facteur; p.entrees=Math.max(0,Number(p.entrees||0)-base); enregistrerMouvementStock({produitId:p.id,quantite:-base,type:'Annulation réception',reference:c.id,notes:`Annulation de ${q} ${achat} × ${facteur} ${stock}`}); stockModifie=true; }
   if(c.depenseId){ const d=state.depenses.find(x=>x.id===c.depenseId); if(d){d.annulee=true;d.dateAnnulation=todayISO();} }
   c.statut='Annulée'; c.dateAnnulation=todayISO();
   if(stockModifie) await persist('produits','modification');
@@ -1773,22 +1795,37 @@ async function annulerCommande(id){
   await persist('commandes','modification'); showToast('Commande annulée et impacts neutralisés'); render();
 }
 function attachCommandesHandlers(){
-  document.querySelector('input[name="date"]')?.addEventListener('input',e=>commandeFormTmp.date=e.target.value);
-  document.querySelector('select[name="fournisseurId"]')?.addEventListener('change',e=>commandeFormTmp.fournisseurId=e.target.value);
+  const dateCommande=document.querySelector('input[name="date"]');
+  const fournisseurCommande=document.querySelector('select[name="fournisseurId"]');
+  dateCommande?.addEventListener('input',e=>commandeFormTmp.date=e.target.value);
+  dateCommande?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();fournisseurCommande?.focus();}});
+  fournisseurCommande?.addEventListener('change',e=>{commandeFormTmp.fournisseurId=e.target.value;focusCommande?.('.commande-produit',0);});
+  fournisseurCommande?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();focusCommande?.('.commande-produit',0);}});
   document.querySelector('textarea[name="observations"]')?.addEventListener('input',e=>commandeFormTmp.observations=e.target.value);
-  document.querySelectorAll('.commande-produit').forEach(s=>s.addEventListener('change',()=>{const i=Number(s.dataset.i);if(s.value && s.value!=='__nouveau__' && commandeLignesTmp.some((l,j)=>j!==i&&l.produitId===s.value)){showToast('Ce bien est déjà présent dans cette commande');s.value='';commandeLignesTmp[i].produitId='';return;}commandeLignesTmp[i].produitId=s.value;if(s.value==='__nouveau__'){commandeLignesTmp[i].nomManuel='';commandeLignesTmp[i].categorieManuelle='Autres';render();return;}const p=produitById(s.value);if(p){commandeLignesTmp[i].prixUnitaire=Number(p.prix)||0;const prix=document.querySelector('.commande-prix[data-i="'+i+'"]');if(prix)prix.value=commandeLignesTmp[i].prixUnitaire;}}));
+  const focusCommande = (selector,i)=>setTimeout(()=>document.querySelector(`${selector}[data-i="${i}"]`)?.focus(),60);
+  const ajouterLigneEtFocus = ()=>{ const i=commandeLignesTmp.length; commandeLignesTmp.push({produitId:'',quantite:1,prixUnitaire:0}); render(); focusCommande('.commande-produit',i); };
+  document.querySelectorAll('.commande-produit').forEach(s=>s.addEventListener('change',()=>{const i=Number(s.dataset.i);if(s.value && s.value!=='__nouveau__' && commandeLignesTmp.some((l,j)=>j!==i&&l.produitId===s.value)){showToast('Ce bien est déjà présent dans cette commande');s.value='';commandeLignesTmp[i].produitId='';return;}commandeLignesTmp[i].produitId=s.value;if(s.value==='__nouveau__'){commandeLignesTmp[i].nomManuel='';commandeLignesTmp[i].categorieManuelle='Autres';commandeLignesTmp[i].uniteStock='Unité';commandeLignesTmp[i].uniteAchat='Unité';commandeLignesTmp[i].facteurAchat=1;render();focusCommande('.commande-nouveau-nom',i);return;}const p=produitById(s.value);if(p){commandeLignesTmp[i].prixUnitaire=Number(p.prix)||0;const prix=document.querySelector('.commande-prix[data-i="'+i+'"]');if(prix)prix.value=commandeLignesTmp[i].prixUnitaire;focusCommande('.commande-qte',i);}}));
   document.querySelectorAll('.commande-nouveau-nom').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].nomManuel=x.value));
+  document.querySelectorAll('.commande-nouveau-nom').forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();focusCommande('.commande-nouveau-categorie',Number(x.dataset.i));}}));
   document.querySelectorAll('.commande-nouveau-categorie').forEach(x=>x.addEventListener('change',()=>commandeLignesTmp[Number(x.dataset.i)].categorieManuelle=x.value));
+  document.querySelectorAll('.commande-nouveau-categorie').forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();focusCommande('.commande-nouveau-stock',Number(x.dataset.i));}}));
+  document.querySelectorAll('.commande-nouveau-stock').forEach(x=>x.addEventListener('change',()=>{ commandeLignesTmp[Number(x.dataset.i)].uniteStock=x.value; render(); }));
+  document.querySelectorAll('.commande-nouveau-stock').forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();focusCommande('.commande-nouveau-unite',Number(x.dataset.i));}}));
   document.querySelectorAll('.commande-nouveau-unite').forEach(x=>x.addEventListener('change',()=>{ commandeLignesTmp[Number(x.dataset.i)].uniteAchat=x.value; render(); }));
+  document.querySelectorAll('.commande-nouveau-unite').forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();focusCommande('.commande-nouveau-facteur',Number(x.dataset.i));}}));
   document.querySelectorAll('.commande-nouveau-facteur').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].facteurAchat=Math.max(1,Number(x.value)||1)));
+  document.querySelectorAll('.commande-nouveau-facteur').forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();focusCommande('.commande-qte',Number(x.dataset.i));}}));
   document.querySelectorAll('.commande-qte').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].quantite=Number(x.value)||1));
+  document.querySelectorAll('.commande-qte').forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();focusCommande('.commande-prix',Number(x.dataset.i));}}));
   document.querySelectorAll('.commande-prix').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].prixUnitaire=Number(x.value)||0));
+  document.querySelectorAll('.commande-prix').forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouterLigneEtFocus();}}));
   document.querySelectorAll('[data-remove-ligne]').forEach(b=>b.addEventListener('click',()=>{commandeLignesTmp.splice(Number(b.dataset.removeLigne),1);if(!commandeLignesTmp.length)commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];render();}));
-  document.getElementById('btnAddCommandeLigne')?.addEventListener('click',()=>{commandeLignesTmp.push({produitId:'',quantite:1,prixUnitaire:0});render();});
+  document.getElementById('btnAddCommandeLigne')?.addEventListener('click',ajouterLigneEtFocus);
   document.getElementById('cancelEditCommande')?.addEventListener('click',()=>{state.editing.commandes=null;commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];commandeFormTmp={fournisseurId:'',date:todayISO(),observations:''};render();});
+  setTimeout(()=>{ if(commandeFormTmp.fournisseurId) focusCommande('.commande-produit',0); else fournisseurCommande?.focus(); },60);
   document.getElementById('formCommande')?.addEventListener('submit',async e=>{
     e.preventDefault(); const fd=new FormData(e.target); commandeFormTmp.date=fd.get('date')||todayISO(); commandeFormTmp.fournisseurId=fd.get('fournisseurId')||''; commandeFormTmp.observations=(fd.get('observations')||'').trim();
-    commandeLignesTmp.forEach((l,i)=>{const row=document.querySelector('.commande-ligne[data-i="'+i+'"]');const nom=row?.querySelector('.commande-nouveau-nom');const cat=row?.querySelector('.commande-nouveau-categorie');const unite=row?.querySelector('.commande-nouveau-unite');const facteur=row?.querySelector('.commande-nouveau-facteur');if(nom)l.nomManuel=String(nom.value||'').trim();if(cat)l.categorieManuelle=cat.value||'Autres';if(unite)l.uniteAchat=unite.value||'Unité';if(facteur)l.facteurAchat=Math.max(1,Number(facteur.value)||1);});
+    commandeLignesTmp.forEach((l,i)=>{const row=document.querySelector('.commande-ligne[data-i="'+i+'"]');const nom=row?.querySelector('.commande-nouveau-nom');const cat=row?.querySelector('.commande-nouveau-categorie');const unite=row?.querySelector('.commande-nouveau-unite');const facteur=row?.querySelector('.commande-nouveau-facteur');if(nom)l.nomManuel=String(nom.value||'').trim();const stock=row?.querySelector('.commande-nouveau-stock');if(cat)l.categorieManuelle=cat.value||'Autres';if(stock)l.uniteStock=stock.value||'Unité';if(unite)l.uniteAchat=unite.value||'Unité';if(facteur)l.facteurAchat=Math.max(1,Number(facteur.value)||1);});
     const editId=state.editing.commandes; const old=editId?state.commandes.find(c=>c.id===editId):null; let catalogueAjoute=false; const lignes=[]; const produitsDejaVus=new Set(); const nomsManuelsDejaVus=new Set();
     for(const l of commandeLignesTmp.filter(x=>x.produitId)){
       let produitId=l.produitId; let p=produitById(produitId);
@@ -1796,11 +1833,11 @@ function attachCommandesHandlers(){
         const nom=String(l.nomManuel||'').trim(); if(!nom){showToast('Saisissez le nom du nouveau bien');return;} const cleNom=nom.toLowerCase(); if(nomsManuelsDejaVus.has(cleNom)){showToast('Ce nouveau bien est déjà présent dans cette commande');return;} nomsManuelsDejaVus.add(cleNom);
         const existant=state.produits.find(x=>(x.nom||'').trim().toLowerCase()===nom.toLowerCase() && x.type==='Bien');
         if(existant){produitId=existant.id;p=existant;}
-        else {p={id:uid('prod'),nom,categorie:l.categorieManuelle||'Autres',type:'Bien',prix:0,stockInitial:0,entrees:0,seuilAlerte:5,uniteAchat:l.uniteAchat||'Unité',facteurAchat:Math.max(1,Number(l.facteurAchat)||1),actif:true,dateCreation:todayISO()};state.produits.push(p);produitId=p.id;catalogueAjoute=true;}
+        else {p={id:uid('prod'),nom,categorie:l.categorieManuelle||'Autres',type:'Bien',prix:0,stockInitial:0,entrees:0,seuilAlerte:5,uniteStock:l.uniteStock||'Unité',uniteAchat:l.uniteAchat||'Unité',facteurAchat:Math.max(1,Number(l.facteurAchat)||1),actif:true,dateCreation:todayISO()};state.produits.push(p);produitId=p.id;catalogueAjoute=true;}
       }
       if(!p){showToast('Produit introuvable dans le catalogue');return;} if(produitsDejaVus.has(produitId)){showToast('Un même bien ne peut apparaître qu’une seule fois dans cette commande');return;} produitsDejaVus.add(produitId);
       const oldLine=old?.lignes?.find(x=>x.produitId===produitId || x.nom===p.nom);
-      lignes.push({produitId,nom:p.nom,quantite:Number(l.quantite)||1,quantiteRecue:Number(oldLine?.quantiteRecue||l.quantiteRecue||0),prixUnitaire:Number(l.prixUnitaire)||0,uniteAchat:uniteAchat(p),facteurAchat:facteurAchat(p)});
+      lignes.push({produitId,nom:p.nom,quantite:Number(l.quantite)||1,quantiteRecue:Number(oldLine?.quantiteRecue||l.quantiteRecue||0),prixUnitaire:Number(l.prixUnitaire)||0,uniteStock:uniteStock(p),uniteAchat:uniteAchat(p),facteurAchat:facteurAchat(p)});
     }
     if(!fd.get('fournisseurId')||!lignes.length){showToast('Choisissez un fournisseur et au moins un bien');return;}
     const obj={id:old?.id||uid('cmd'),numero:old?.numero||'CMD-'+String(state.commandes.length+1).padStart(4,'0'),date:fd.get('date')||todayISO(),fournisseurId:fd.get('fournisseurId'),lignes,observations:fd.get('observations').trim(),statut:old?.statut||'Brouillon'};

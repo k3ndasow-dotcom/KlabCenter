@@ -103,3 +103,29 @@ Exemple : si un carton contient 12 cahiers, choisissez `Carton` et indiquez `12`
 Les anciennes fiches produits restent compatibles : lorsqu’aucun conditionnement n’est défini, KlabCenter utilise `Unité` avec un coefficient de 1. Les services ne possèdent aucun stock et ne sont pas concernés par les conditionnements.
 
 Lors de l’annulation d’une commande, le coefficient mémorisé dans la ligne de commande est utilisé pour reprendre exactement les unités ajoutées au stock.
+
+
+## 13. Unité de stock et conditionnement d’achat
+
+La fiche Produit distingue maintenant deux notions : **l’unité de stock**, qui est l’unité réellement comptée dans le stock et les ventes, et le **conditionnement d’achat**, qui est l’unité utilisée pour commander auprès du fournisseur.
+
+Exemple pour le papier : l’unité de stock est `Paquet`, le conditionnement d’achat est `Carton`, et le nombre d’unités de stock dans le conditionnement est `5`. Une commande de `2 Cartons` représente donc `10 Paquets` en stock. Les 500 feuilles d’une rame ne sont pas gérées si l’activité ne vend pas les feuilles séparément.
+
+Exemple pour les cahiers : l’unité de stock est `Cahier`, le conditionnement d’achat est `Paquet`, et le nombre d’unités de stock dans le conditionnement est `12`. Une commande de `3 Paquets` représente donc `36 Cahiers` en stock.
+
+Dans la commande, l’application affiche l’unité achetée, l’équivalence en unités de stock et le prix par unité achetée. Lors de la réception, la quantité saisie est exprimée dans le conditionnement d’achat ; le stock est augmenté automatiquement avec la formule suivante :
+
+```text
+unités ajoutées au stock = quantité reçue × unités de stock par conditionnement
+```
+
+Les lignes de commande mémorisent leur unité de stock et leur facteur de conversion. Cette mémorisation protège l’historique : une modification ultérieure de la fiche Produit ne change pas la conversion déjà utilisée par une commande existante. Les anciennes fiches sans unité de stock explicite restent compatibles et utilisent `Unité` par défaut.
+
+
+## 14. Saisie rapide et guidée
+
+Le formulaire Produit place automatiquement le curseur sur le type lors d’une nouvelle création. Après le choix de `Bien`, le curseur revient au nom, puis la touche `Entrée` fait progresser la saisie vers la catégorie, l’unité de stock, le conditionnement d’achat, le nombre d’unités, le seuil et les quantités initiales. À la fin, le formulaire est envoyé automatiquement.
+
+Dans une commande, le curseur commence par le fournisseur. Après sa sélection, il passe au premier bien. Pour un bien déjà présent au catalogue, la séquence est : produit, quantité achetée, prix d’achat. Après la saisie du prix et la validation par `Entrée`, une nouvelle ligne est créée et le curseur passe directement au produit suivant. Pour un nouveau bien, la séquence est : nom, catégorie, unité de stock, conditionnement d’achat, nombre d’unités, quantité et prix.
+
+Cette navigation fonctionne avec la touche `Entrée` sur ordinateur et avec la validation du clavier mobile. Les boutons classiques restent disponibles pour les utilisateurs qui préfèrent la souris ou le toucher. Les contrôles anti-doublon et les validations obligatoires restent actifs.
