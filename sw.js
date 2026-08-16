@@ -1,4 +1,4 @@
-const CACHE_NAME = 'klabcenter-v14';
+const CACHE_NAME = 'klabcenter-v15';
 const CORE_ASSETS = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', event => {

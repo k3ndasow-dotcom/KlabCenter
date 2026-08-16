@@ -154,3 +154,14 @@ La saisie Produit a été simplifiée : les informations principales sont désor
 La saisie Commande affiche le fournisseur et une ligne simple avec le bien, la quantité et le prix. Les informations de conditionnement d’un nouveau bien sont regroupées dans une zone facultative. Les observations sont également facultatives. La logique de conversion, les contrôles anti-doublon, les réceptions et les mouvements de stock restent inchangés en arrière-plan.
 
 Pour le papier, l’utilisation courante se résume à : créer le produit `Papier rame A4`, choisir `Paquet` comme unité suivie en stock, choisir `Carton` dans `Achat en`, saisir `5` dans `Unités dans 1 achat`, puis enregistrer. Dans une commande, choisir le fournisseur, choisir le papier, saisir la quantité de cartons et le prix d’un carton.
+
+
+## 18. Saisie pédagogique pour un assistant
+
+L’interface explique désormais chaque notion directement avant ou sous le champ concerné. **Unité suivie en stock** signifie ce qui est compté et vendu. Pour le papier, il faut choisir `Paquet`, et non `Feuille`, si l’activité ne vend pas les feuilles séparément. **Le fournisseur vous vend en** désigne le conditionnement réellement commandé, par exemple `Carton`. **Unités dans 1 achat** indique combien d’unités de stock contient ce conditionnement : un carton de cinq paquets correspond à `5`.
+
+Le résumé affiché sous les champs reformule automatiquement la règle. Par exemple : `Vous stockez des Paquets. 1 Carton acheté = 5 Paquets en stock.` Le prix de vente est expliqué comme le prix auquel l’entreprise vend une unité de stock ; il ne faut pas y saisir le prix du fournisseur.
+
+Dans une commande, le prix est intitulé **Prix d’achat pour 1 Carton** ou **Prix d’achat pour 1 Paquet**, selon le conditionnement enregistré. L’application précise qu’il faut saisir le prix d’un conditionnement acheté, et non le total général. Après la saisie de la quantité, un aperçu indique le résultat attendu : `Vous commandez 2 Cartons. Après réception : 10 Paquets en stock.`
+
+La liste des biens affiche également la conversion avant la sélection, par exemple : `Papier rame A4 · 1 Carton = 5 Paquets`. Ces explications sont destinées à permettre à un assistant de travailler sans connaître les termes techniques de l’application.
