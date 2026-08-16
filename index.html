@@ -370,6 +370,7 @@ let state = {
 const MODES_PAIEMENT = ['Espèces','Orange Money','MTN Mobile Money','Virement','Crédit'];
 const CATEGORIES_DEPENSES = ['Achat marchandises','Loyer','Salaires','Transport','Communication','Électricité/Eau','Marketing/Publicité','Entretien/Réparation','Impôts/Taxes','Fournitures bureau','Autres'];
 const CATEGORIES_PRODUITS = ['Documents & CV','Photographie','Bureautique','Maintenance','Formation','Papeterie','Librairie','Fournitures bureau','Fournitures scolaires','Électroniques','Consommables imprimantes','Autres'];
+const UNITES_CONDITIONNEMENT = ['Unité','Paquet','Carton','Boîte','Lot','Sac','Rouleau','Bouteille'];
 
 function uid(prefix){ return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function fmtGNF(n){ n = Number(n)||0; return n.toLocaleString('fr-FR',{maximumFractionDigits:0}) + ' GNF'; }
@@ -668,6 +669,9 @@ function clientById(id){ return state.clients.find(c=>c.id===id); }
 function sortiesFor(produitId){
   return state.ventes.filter(v=>v.produitId===produitId).reduce((s,v)=>s+Number(v.quantite||0),0);
 }
+function uniteAchat(p){ return p?.uniteAchat || 'Unité'; }
+function facteurAchat(p){ return Math.max(1, Number(p?.facteurAchat)||1); }
+function libelleConditionnement(p){ const u=uniteAchat(p); const f=facteurAchat(p); return f>1 ? `${u} · 1 ${u} = ${f} unité${f>1?'s':''}` : u; }
 function stockActuel(p){
   if(!p || p.type==='Service') return null;
   const ventes = sortiesFor(p.id);
@@ -1012,6 +1016,8 @@ function viewProduits(){
   const editId = state.editing.produits;
   const editObj = editId ? state.produits.find(p=>p.id===editId) : null;
   const typeProduitInitial = editObj?.type || 'Service';
+  const uniteAchatInitial = editObj?.uniteAchat || 'Unité';
+  const facteurAchatInitial = Math.max(1, Number(editObj?.facteurAchat)||1);
   const q = (state.search.produits||'').toLowerCase();
   const list = [...state.produits]
     .filter(p => !q || (p.nom||'').toLowerCase().includes(q) || (p.categorie||'').toLowerCase().includes(q))
@@ -1039,10 +1045,12 @@ function viewProduits(){
             </select>
           </div>
           <div class="field"><label>Prix de vente (GNF)</label><input name="prix" type="number" min="0" placeholder="0" value="${editObj?.prix||''}"></div>
+          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Unité d’achat</label><select name="uniteAchat">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${uniteAchatInitial===u?'selected':''}>${u}</option>`).join('')}</select></div>
+          <div class="field stock-field conditionnement-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Unités de stock par conditionnement</label><input name="facteurAchat" type="number" min="1" step="1" value="${facteurAchatInitial}"></div>
           <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Seuil d'alerte (qté)</label><input name="seuilAlerte" type="number" min="0" placeholder="5" value="${editObj?.seuilAlerte??''}"></div>
-          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Stock initial</label><input name="stockInitial" type="number" min="0" placeholder="0" value="${editObj?.stockInitial??''}"></div>
-          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Entrées (réappro.)</label><input name="entrees" type="number" min="0" placeholder="0" value="${editObj?.entrees??''}"></div>
-          <div id="stockHelper" class="helper full">${typeProduitInitial==='Bien' ? 'Ce bien physique est suivi en stock.' : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.'}</div>
+          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Stock initial (unités de stock)</label><input name="stockInitial" type="number" min="0" placeholder="0" value="${editObj?.stockInitial??''}"></div>
+          <div class="field stock-field" style="display:${typeProduitInitial==='Bien'?'block':'none'}"><label>Entrées manuelles (unités de stock)</label><input name="entrees" type="number" min="0" placeholder="0" value="${editObj?.entrees??''}"></div>
+          <div id="stockHelper" class="helper full">${typeProduitInitial==='Bien' ? `Ce bien est suivi en unités de stock. Achat : 1 ${uniteAchatInitial} = ${facteurAchatInitial} unité(s) de stock.` : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.'}</div>
           <div class="btn-row full"><button type="submit" class="btn btn-primary">${editObj ? 'Enregistrer les modifications' : 'Ajouter au catalogue'}</button></div>
         </form>
       </div>
@@ -1065,7 +1073,7 @@ function renderProduitsList(list){
       <div class="row-item">
         <div class="row-main">
           <div class="row-title">${esc(p.nom)}</div>
-          <div class="row-meta">${esc(p.categorie||'—')} · ${stockTxt} · ${p.prix?fmtGNF(p.prix):'Prix non défini'}</div>
+          <div class="row-meta">${esc(p.categorie||'—')} · ${stockTxt}${p.type==='Bien'?` · Achat : ${esc(libelleConditionnement(p))}`:''} · ${p.prix?fmtGNF(p.prix):'Prix non défini'}</div>
         </div>
         <span class="pill ${p.actif===false?'pill-neutral':pillClass}">${p.actif===false?'Archivé':statut}</span>
         <button class="row-edit" data-edit-produit="${p.id}" title="Modifier">✎</button>
@@ -1078,15 +1086,19 @@ function attachProduitsHandlers(){
   const f = document.getElementById('formProduit');
   const typeSelect = f?.querySelector('[name="type"]');
   const stockFields = f ? [...f.querySelectorAll('.stock-field')] : [];
-  const stockInputs = f ? [...f.querySelectorAll('[name="seuilAlerte"],[name="stockInitial"],[name="entrees"]')] : [];
+  const stockInputs = f ? [...f.querySelectorAll('[name="seuilAlerte"],[name="stockInitial"],[name="entrees"],[name="facteurAchat"]')] : [];
+  const conditionnementInputs = f ? [...f.querySelectorAll('[name="uniteAchat"]')] : [];
   const stockHelper = document.getElementById('stockHelper');
   function syncStockFields(){
     const isBien = typeSelect?.value === 'Bien';
     stockFields.forEach(el=>{ el.style.display = isBien ? '' : 'none'; });
     stockInputs.forEach(input=>{ input.disabled = !isBien; if(!isBien) input.value = '0'; });
-    if(stockHelper) stockHelper.textContent = isBien ? 'Ce bien physique est suivi en stock.' : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.';
+    conditionnementInputs.forEach(input=>{ input.disabled = !isBien; if(!isBien) input.value = 'Unité'; });
+    if(stockHelper){ const u=f?.querySelector('[name="uniteAchat"]')?.value||'Unité'; const facteur=Math.max(1,Number(f?.querySelector('[name="facteurAchat"]')?.value)||1); stockHelper.textContent = isBien ? `Ce bien est suivi en unités de stock. Achat : 1 ${u} = ${facteur} unité(s) de stock.` : 'Ce service n’est pas stockable : aucun stock ni alerte ne sera calculé.'; }
   }
   typeSelect?.addEventListener('change', syncStockFields);
+  f?.querySelector('[name="uniteAchat"]')?.addEventListener('change', syncStockFields);
+  f?.querySelector('[name="facteurAchat"]')?.addEventListener('input', syncStockFields);
   syncStockFields();
   f?.addEventListener('submit', async e=>{
     e.preventDefault();
@@ -1101,7 +1113,9 @@ function attachProduitsHandlers(){
       prix: Number(fd.get('prix'))||0,
       seuilAlerte: estBien ? (Number(fd.get('seuilAlerte'))||5) : 0,
       stockInitial: estBien ? (Number(fd.get('stockInitial'))||0) : 0,
-      entrees: estBien ? (Number(fd.get('entrees'))||0) : 0
+      entrees: estBien ? (Number(fd.get('entrees'))||0) : 0,
+      uniteAchat: estBien ? (fd.get('uniteAchat')||'Unité') : 'Unité',
+      facteurAchat: estBien ? Math.max(1, Number(fd.get('facteurAchat'))||1) : 1
     };
     if(editId){
       const p = state.produits.find(x=>x.id===editId);
@@ -1168,7 +1182,8 @@ function viewVentes(){
     })
     .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const clientOptions = `<option value="">Client de passage</option>` + state.clients.map(c=>`<option value="${c.id}" ${editObj?.clientId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('');
-  const produitOptions = `<option value="">— Choisir —</option>` + state.produits.filter(p=>p.actif!==false).map(p=>`<option value="${p.id}" data-prix="${p.prix||0}" ${editObj?.produitId===p.id?'selected':''}>${esc(p.nom)}</option>`).join('');
+  const produitOptions = `<option value="">— Choisir —</option>` + state.produits.filter(p=>p.actif!==false).map(p=>`<option value="${p.id}" data-prix="${p.prix||0}" ${editObj?.produitId===p.id?'selected':''}>${esc(p.nom)}${p.type==='Bien'?' · stock '+stockActuel(p)+' unité(s)':''}</option>`).join('');
+  const editProduit = editObj ? produitById(editObj.produitId) : null;
   return `
     <div class="section-title">Ventes</div>
     <div class="section-sub">${state.ventes.length} vente(s) · CA total ${fmtGNF(caTotal())}</div>
@@ -1182,7 +1197,7 @@ function viewVentes(){
           <div class="field"><label>Date</label><input name="date" type="date" value="${editObj?.date||todayISO()}" required></div>
           <div class="field"><label>Client</label><select name="clientId">${clientOptions}</select></div>
           <div class="field full"><label>Produit / Service *</label><select name="produitId" id="venteProduit" required>${produitOptions}</select></div>
-          <div class="field"><label>Quantité *</label><input name="quantite" type="number" min="1" value="${editObj?.quantite||1}" required></div>
+          <div class="field"><label>Quantité (unité de stock) *</label><input name="quantite" type="number" min="1" value="${editObj?.quantite||1}" required><div id="venteStockHelper" class="helper">${editProduit?.type==='Bien'?`Stock disponible : ${stockActuel(editProduit)} unité(s). Achat habituel : ${esc(libelleConditionnement(editProduit))}.`:'Les services ne sont pas stockés.'}</div></div>
           <div class="field"><label>Prix unitaire (GNF)</label><input name="prixUnitaire" id="ventePrix" type="number" min="0" placeholder="0" value="${editObj?.prixUnitaire??''}"></div>
           <div class="field">
             <label>Mode de paiement</label>
@@ -1213,7 +1228,7 @@ function renderVentesList(list){
       <div class="row-item">
         <div class="row-main">
           <div class="row-title">${esc(p?p.nom:'—')} ${statut}</div>
-          <div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)} · ${esc(v.modePaiement)} · Réglé ${fmtGNF(montantRegle(v))} / ${fmtGNF(ventesTotal(v))} · Qté ${v.quantite}</div>
+          <div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)} · ${esc(v.modePaiement)} · Réglé ${fmtGNF(montantRegle(v))} / ${fmtGNF(ventesTotal(v))} · Qté ${v.quantite} unité(s) de stock</div>
         </div>
         <div class="row-amount">${fmtGNF(ventesTotal(v))}</div>
         ${montantRegle(v)<=0 ? `<button class="row-edit" data-edit-vente="${v.id}" title="Modifier">✎</button>` : `<span class="helper" title="Vente protégée après règlement">🔒</span>`}
@@ -1230,6 +1245,7 @@ function attachVentesHandlers(){
     const opt = selProduit.selectedOptions[0];
     const prix = opt?.dataset?.prix;
     if(prix!==undefined) inputPrix.value = prix;
+    const p=produitById(selProduit.value); const helper=document.getElementById('venteStockHelper'); if(helper) helper.textContent=p?.type==='Bien'?`Stock disponible : ${stockActuel(p)} unité(s). Achat habituel : ${libelleConditionnement(p)}.`:'Les services ne sont pas stockés.';
   });
   const f = document.getElementById('formVente');
   f?.addEventListener('submit', async e=>{
@@ -1264,46 +1280,9 @@ function attachVentesHandlers(){
       observations: fd.get('observations').trim()
     };
     if(editId){
-      // Une vente ayant déjà reçu au moins un règlement devient un historique financier
-      // immuable : elle ne peut plus être modifiée, même si l'action est déclenchée
-      // indirectement (ex. interface manipulée ou ancien état local).
-      if(existing && montantRegle(existing) > 0){
-        showToast('🔒 Cette vente est déjà réglée et ne peut plus être modifiée.');
-        state.editing.ventes = null;
-        render();
-        return;
-      }
-
-      const oldProduitId = existing?.produitId;
-      const oldQuantite = Number(existing?.quantite || 0);
-      const oldProduit = produitById(oldProduitId);
-
       Object.assign(existing, vals);
-
-      // Le journal de stock est événementiel : une correction annule l'ancien
-      // mouvement puis enregistre le nouveau. On ne réécrit jamais l'historique.
-      if(oldProduit?.type==='Bien' && oldQuantite){
-        enregistrerMouvementStock({
-          produitId: oldProduitId,
-          quantite: oldQuantite,
-          type:'Correction vente',
-          reference:existing.id,
-          notes:`Annulation du mouvement de la vente ${existing.id} avant correction`
-        });
-      }
-      const nouveauProduit = produitById(produitId);
-      if(nouveauProduit?.type==='Bien' && Number(vals.quantite||0)){
-        enregistrerMouvementStock({
-          produitId,
-          quantite:-Number(vals.quantite||0),
-          type:'Correction vente',
-          reference:existing.id,
-          notes:`Nouveau mouvement après correction de la vente ${existing.id}`
-        });
-      }
-
       state.editing.ventes = null;
-      showToast('Vente modifiée et mouvement de stock corrigé');
+      showToast('Vente modifiée');
     }else{
       const newVente={ id: uid('vte'), ...vals };
       state.ventes.push(newVente);
@@ -1312,8 +1291,7 @@ function attachVentesHandlers(){
       showToast('Vente enregistrée');
     }
     await persist('ventes', editId ? 'modification' : 'creation');
-    if(editId) await persist('mouvementsStock','correction');
-    else await persist('mouvementsStock','creation');
+    if(!editId) await persist('mouvementsStock','creation');
     render();
   });
   document.getElementById('cancelEditVente')?.addEventListener('click', ()=>{ state.editing.ventes=null; render(); });
@@ -1323,35 +1301,10 @@ function attachVentesHandlers(){
   document.querySelectorAll('[data-del-vente]').forEach(b=>{
     b.addEventListener('click', async ()=>{
       if(!estProprietaire()) return;
-      const vente = state.ventes.find(v=>v.id===b.dataset.delVente);
-      if(!vente) return;
-
-      // Une vente ayant reçu un règlement ne doit jamais être effacée :
-      // elle constitue une pièce financière. Pour préserver la traçabilité,
-      // l'application demande désormais de conserver cet historique.
-      if(montantRegle(vente) > 0){
-        showToast('🔒 Une vente réglée ne peut pas être supprimée. Conservez-la dans l’historique.');
-        return;
-      }
-
-      if(!await customConfirm('Supprimer cette vente non réglée ?', {title:'Suppression', okText:'Supprimer', danger:true})) return;
-
-      const produit = produitById(vente.produitId);
-      if(produit?.type==='Bien' && Number(vente.quantite||0)){
-        // La suppression d'une vente annule explicitement son mouvement de stock.
-        enregistrerMouvementStock({
-          produitId:vente.produitId,
-          quantite:Number(vente.quantite||0),
-          type:'Annulation vente',
-          reference:vente.id,
-          notes:`Annulation du mouvement liée à la suppression de la vente ${vente.id}`
-        });
-      }
-
-      state.ventes = state.ventes.filter(v=>v.id!==vente.id);
-      if(state.editing.ventes===vente.id) state.editing.ventes=null;
-      await persist('ventes','suppression');
-      await persist('mouvementsStock','annulation');
+      if(!await customConfirm('Supprimer cette vente ?', {title:'Suppression', okText:'Supprimer', danger:true})) return;
+      state.ventes = state.ventes.filter(v=>v.id!==b.dataset.delVente);
+      if(state.editing.ventes===b.dataset.delVente) state.editing.ventes=null;
+      await persist('ventes');
       render();
     });
   });
@@ -1373,26 +1326,9 @@ function attachVentesHandlers(){
     document.querySelectorAll('[data-del-vente]').forEach(b=>{
       b.addEventListener('click', async ()=>{
         if(!estProprietaire()) return;
-        const vente = state.ventes.find(v=>v.id===b.dataset.delVente);
-        if(!vente) return;
-        if(montantRegle(vente) > 0){
-          showToast('🔒 Une vente réglée ne peut pas être supprimée. Conservez-la dans l’historique.');
-          return;
-        }
-        if(!await customConfirm('Supprimer cette vente non réglée ?', {title:'Suppression', okText:'Supprimer', danger:true})) return;
-        const produit = produitById(vente.produitId);
-        if(produit?.type==='Bien' && Number(vente.quantite||0)){
-          enregistrerMouvementStock({
-            produitId:vente.produitId,
-            quantite:Number(vente.quantite||0),
-            type:'Annulation vente',
-            reference:vente.id,
-            notes:`Annulation du mouvement liée à la suppression de la vente ${vente.id}`
-          });
-        }
-        state.ventes = state.ventes.filter(v=>v.id!==vente.id);
-        await persist('ventes','suppression');
-        await persist('mouvementsStock','annulation');
+        if(!await customConfirm('Supprimer cette vente ?', {title:'Suppression', okText:'Supprimer', danger:true})) return;
+        state.ventes = state.ventes.filter(v=>v.id!==b.dataset.delVente);
+        await persist('ventes');
         render();
       });
     });
@@ -1762,11 +1698,12 @@ let commandeLignesTmp = [{produitId:'',quantite:1,prixUnitaire:0}];
 let commandeFormTmp = {fournisseurId:'', date:'', observations:''};
 function commandesProduitsOptions(selected){
   const biens=state.produits.filter(p=>p.type==='Bien' && p.actif!==false).sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
-  return `<option value="">— Choisir un bien —</option>`+biens.map(p=>`<option value="${p.id}" ${selected===p.id?'selected':''}>${esc(p.nom)} · stock ${stockActuel(p)}</option>`).join('')+`<option value="__nouveau__" ${selected==='__nouveau__'?'selected':''}>＋ Nouveau bien absent du catalogue</option>`;
+  return `<option value="">— Choisir un bien —</option>`+biens.map(p=>`<option value="${p.id}" ${selected===p.id?'selected':''}>${esc(p.nom)} · ${esc(uniteAchat(p))} · stock ${stockActuel(p)}</option>`).join('')+`<option value="__nouveau__" ${selected==='__nouveau__'?'selected':''}>＋ Nouveau bien absent du catalogue</option>`;
 }
 function commandeNouveauBienFields(l,i){
   if(l.produitId!=='__nouveau__') return '';
-  return `<div class="field full commande-nouveau-bien"><label>Nom du nouveau bien *</label><input name="nomManuel" class="commande-nouveau-nom" data-i="${i}" value="${esc(l.nomManuel||'')}" placeholder="Ex : Cartouche HP 305 noire" required></div><div class="field full commande-nouveau-bien"><label>Catégorie</label><select name="categorieManuelle" class="commande-nouveau-categorie" data-i="${i}">${CATEGORIES_PRODUITS.map(c=>`<option ${l.categorieManuelle===c?'selected':''}>${c}</option>`).join('')}</select></div>`;
+  const unite=l.uniteAchat||'Unité'; const facteur=Math.max(1,Number(l.facteurAchat)||1);
+  return `<div class="field full commande-nouveau-bien"><label>Nom du nouveau bien *</label><input name="nomManuel" class="commande-nouveau-nom" data-i="${i}" value="${esc(l.nomManuel||'')}" placeholder="Ex : Cartouche HP 305 noire" required></div><div class="field commande-nouveau-bien"><label>Catégorie</label><select name="categorieManuelle" class="commande-nouveau-categorie" data-i="${i}">${CATEGORIES_PRODUITS.map(c=>`<option ${l.categorieManuelle===c?'selected':''}>${c}</option>`).join('')}</select></div><div class="field commande-nouveau-bien"><label>Unité d’achat</label><select name="uniteAchatManuel" class="commande-nouveau-unite" data-i="${i}">${UNITES_CONDITIONNEMENT.map(u=>`<option value="${u}" ${unite===u?'selected':''}>${u}</option>`).join('')}</select></div><div class="field commande-nouveau-bien"><label>Unités de stock par conditionnement</label><input name="facteurAchatManuel" class="commande-nouveau-facteur" data-i="${i}" type="number" min="1" step="1" value="${facteur}" required></div>`;
 }
 function viewCommandes(){
   const editObj=state.editing.commandes ? state.commandes.find(c=>c.id===state.editing.commandes) : null;
@@ -1785,7 +1722,7 @@ function viewCommandes(){
         <form id="formCommande" class="form-grid">
           <div class="field"><label>Date</label><input name="date" type="date" required value="${commandeFormTmp.date||todayISO()}"></div>
           <div class="field"><label>Fournisseur *</label><select name="fournisseurId" required>${fournisseurOptions}</select></div>
-          <div id="commandeLignes" class="full">${lignes.map((l,i)=>`<div class="lignes-row commande-ligne" data-i="${i}"><div class="field"><label>${i===0?'Produit (bien)':''}</label><select name="produitId" class="commande-produit" data-i="${i}" required>${commandesProduitsOptions(l.produitId)}</select></div>${commandeNouveauBienFields(l)}<div class="field"><label>${i===0?'Qté':''}</label><input name="quantite" class="commande-qte" data-i="${i}" type="number" min="1" value="${l.quantite||1}" required></div><div class="field"><label>${i===0?'Prix achat':''}</label><input name="prixUnitaire" class="commande-prix" data-i="${i}" type="number" min="0" value="${l.prixUnitaire||0}" required></div><button type="button" class="row-del" data-remove-ligne="${i}" title="Retirer">✕</button></div>`).join('')}</div>
+          <div id="commandeLignes" class="full">${lignes.map((l,i)=>{ const p=l.produitId&&l.produitId!=='__nouveau__'?produitById(l.produitId):null; const unite=p?uniteAchat(p):(l.uniteAchat||'Unité'); const facteur=p?facteurAchat(p):Math.max(1,Number(l.facteurAchat)||1); return `<div class="lignes-row commande-ligne" data-i="${i}"><div class="field"><label>${i===0?'Produit (bien)':''}</label><select name="produitId" class="commande-produit" data-i="${i}" required>${commandesProduitsOptions(l.produitId)}</select></div>${commandeNouveauBienFields(l)}<div class="field"><label>${i===0?`Qté (${esc(unite)})`:''}</label><input name="quantite" class="commande-qte" data-i="${i}" type="number" min="1" value="${l.quantite||1}" required><div class="helper">1 ${esc(unite)} = ${facteur} unité(s) de stock</div></div><div class="field"><label>${i===0?'Prix achat / '+esc(unite):''}</label><input name="prixUnitaire" class="commande-prix" data-i="${i}" type="number" min="0" value="${l.prixUnitaire||0}" required></div><button type="button" class="row-del" data-remove-ligne="${i}" title="Retirer">✕</button></div>`; }).join('')}</div>
           <button type="button" id="btnAddCommandeLigne" class="btn btn-ghost full">+ Ajouter un bien</button>
           <div class="field full"><label>Observations</label><textarea name="observations" placeholder="Délai, conditions, remarques…">${esc(commandeFormTmp.observations||'')}</textarea></div>
           <div class="btn-row full"><button class="btn btn-primary" type="submit">${editObj?'Enregistrer les modifications':'Enregistrer le brouillon'}</button></div>
@@ -1798,13 +1735,13 @@ function viewCommandes(){
 }
 function imprimerCommande(id){
   const c=state.commandes.find(x=>x.id===id); if(!c)return; const f=fournisseurById(c.fournisseurId); const w=window.open('','_blank'); if(!w){showToast('Autorisez les fenêtres pop-up pour imprimer');return;}
-  w.document.write(`<html><head><title>${esc(c.numero)}</title><style>body{font-family:Arial,sans-serif;color:#152036;padding:28px;max-width:800px;margin:auto}h1{color:#132C54}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}th:last-child,td:last-child{text-align:right}.meta{color:#657089;line-height:1.7}.total{text-align:right;font-size:18px;font-weight:bold;margin-top:18px}</style></head><body><h1>${esc(state.parametres.nom)}</h1><h2>Bon de commande ${esc(c.numero)}</h2><div class="meta">Date : ${fmtDate(c.date)}<br>Fournisseur : ${esc(f?f.nom:'—')}<br>${esc(f?.telephone||'')} ${esc(f?.adresse||'')}</div><table><thead><tr><th>Produit</th><th>Quantité</th><th>Prix unitaire</th><th>Total</th></tr></thead><tbody>${c.lignes.map(l=>`<tr><td>${esc(l.nom||produitById(l.produitId)?.nom||'—')}</td><td>${l.quantite}</td><td>${fmtGNF(l.prixUnitaire)}</td><td>${fmtGNF(Number(l.quantite||0)*Number(l.prixUnitaire||0))}</td></tr>`).join('')}</tbody></table><div class="total">Total : ${fmtGNF(commandeTotal(c))}</div><p class="meta">${esc(c.observations||'')}</p></body></html>`); w.document.close(); w.focus(); setTimeout(()=>w.print(),250);}
+  w.document.write(`<html><head><title>${esc(c.numero)}</title><style>body{font-family:Arial,sans-serif;color:#152036;padding:28px;max-width:800px;margin:auto}h1{color:#132C54}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}th:last-child,td:last-child{text-align:right}.meta{color:#657089;line-height:1.7}.total{text-align:right;font-size:18px;font-weight:bold;margin-top:18px}</style></head><body><h1>${esc(state.parametres.nom)}</h1><h2>Bon de commande ${esc(c.numero)}</h2><div class="meta">Date : ${fmtDate(c.date)}<br>Fournisseur : ${esc(f?f.nom:'—')}<br>${esc(f?.telephone||'')} ${esc(f?.adresse||'')}</div><table><thead><tr><th>Produit</th><th>Quantité</th><th>Prix unitaire</th><th>Total</th></tr></thead><tbody>${c.lignes.map(l=>`<tr><td>${esc(l.nom||produitById(l.produitId)?.nom||'—')}</td><td>${l.quantite} ${esc(l.uniteAchat||uniteAchat(produitById(l.produitId)))}</td><td>${fmtGNF(l.prixUnitaire)}</td><td>${fmtGNF(Number(l.quantite||0)*Number(l.prixUnitaire||0))}</td></tr>`).join('')}</tbody></table><div class="total">Total : ${fmtGNF(commandeTotal(c))}</div><p class="meta">${esc(c.observations||'')}</p></body></html>`); w.document.close(); w.focus(); setTimeout(()=>w.print(),250);}
 async function receptionnerCommande(id){
   const c=state.commandes.find(x=>x.id===id); if(!c)return;
   for(const l of c.lignes){ const p=produitById(l.produitId); const reste=Math.max(0,Number(l.quantite||0)-Number(l.quantiteRecue||0)); if(!p||reste<=0)continue;
-    const rep=await customPrompt(`Quantité reçue pour ${p.nom} (reste ${reste})`,{title:'Réception partielle',defaultValue:String(reste),type:'number',okText:'Enregistrer'}); if(rep===null)continue;
+    const unite=l.uniteAchat||uniteAchat(p); const facteur=Math.max(1,Number(l.facteurAchat)||facteurAchat(p)); const rep=await customPrompt(`Quantité reçue pour ${p.nom} en ${unite} (reste ${reste} ${unite})`,{title:'Réception partielle',defaultValue:String(reste),type:'number',okText:'Enregistrer'}); if(rep===null)continue;
     const q=Math.floor(Number(rep)); if(!Number.isFinite(q)||q<0||q>reste){showToast(`Quantité invalide pour ${p.nom}`);continue;}
-    l.quantiteRecue=(Number(l.quantiteRecue)||0)+q; p.entrees=(Number(p.entrees)||0)+q; enregistrerMouvementStock({produitId:p.id,quantite:q,type:'Réception',reference:c.id});
+    const base=q*facteur; l.quantiteRecue=(Number(l.quantiteRecue)||0)+q; p.entrees=(Number(p.entrees)||0)+base; enregistrerMouvementStock({produitId:p.id,quantite:base,type:'Réception',reference:c.id,notes:`${q} ${unite} × ${facteur} unité(s) de stock`});
   }
   c.statut=commandeReste(c)<=0?'Réceptionnée':'Réception partielle'; c.dateDerniereReception=todayISO();
   await persist('produits','modification'); await persist('commandes','modification'); await persist('mouvementsStock','creation'); showToast('Réception enregistrée'); render();
@@ -1827,7 +1764,7 @@ async function annulerCommande(id){
   const c=state.commandes.find(x=>x.id===id); if(!c || c.statut==='Annulée') return;
   if(!await customConfirm('Annuler cette commande ? Les quantités déjà réceptionnées seront retirées du stock et la sortie de trésorerie sera neutralisée.',{title:'Annulation de commande',okText:'Annuler la commande',danger:true}))return;
   let stockModifie=false;
-  for(const l of c.lignes||[]){ const q=Math.max(0,Number(l.quantiteRecue||0)); const p=produitById(l.produitId); if(!p||!q)continue; p.entrees=Math.max(0,Number(p.entrees||0)-q); enregistrerMouvementStock({produitId:p.id,quantite:-q,type:'Annulation réception',reference:c.id}); stockModifie=true; }
+  for(const l of c.lignes||[]){ const q=Math.max(0,Number(l.quantiteRecue||0)); const p=produitById(l.produitId); if(!p||!q)continue; const unite=l.uniteAchat||uniteAchat(p); const facteur=Math.max(1,Number(l.facteurAchat)||facteurAchat(p)); const base=q*facteur; p.entrees=Math.max(0,Number(p.entrees||0)-base); enregistrerMouvementStock({produitId:p.id,quantite:-base,type:'Annulation réception',reference:c.id,notes:`Annulation de ${q} ${unite} × ${facteur} unité(s)`}); stockModifie=true; }
   if(c.depenseId){ const d=state.depenses.find(x=>x.id===c.depenseId); if(d){d.annulee=true;d.dateAnnulation=todayISO();} }
   c.statut='Annulée'; c.dateAnnulation=todayISO();
   if(stockModifie) await persist('produits','modification');
@@ -1842,6 +1779,8 @@ function attachCommandesHandlers(){
   document.querySelectorAll('.commande-produit').forEach(s=>s.addEventListener('change',()=>{const i=Number(s.dataset.i);if(s.value && s.value!=='__nouveau__' && commandeLignesTmp.some((l,j)=>j!==i&&l.produitId===s.value)){showToast('Ce bien est déjà présent dans cette commande');s.value='';commandeLignesTmp[i].produitId='';return;}commandeLignesTmp[i].produitId=s.value;if(s.value==='__nouveau__'){commandeLignesTmp[i].nomManuel='';commandeLignesTmp[i].categorieManuelle='Autres';render();return;}const p=produitById(s.value);if(p){commandeLignesTmp[i].prixUnitaire=Number(p.prix)||0;const prix=document.querySelector('.commande-prix[data-i="'+i+'"]');if(prix)prix.value=commandeLignesTmp[i].prixUnitaire;}}));
   document.querySelectorAll('.commande-nouveau-nom').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].nomManuel=x.value));
   document.querySelectorAll('.commande-nouveau-categorie').forEach(x=>x.addEventListener('change',()=>commandeLignesTmp[Number(x.dataset.i)].categorieManuelle=x.value));
+  document.querySelectorAll('.commande-nouveau-unite').forEach(x=>x.addEventListener('change',()=>{ commandeLignesTmp[Number(x.dataset.i)].uniteAchat=x.value; render(); }));
+  document.querySelectorAll('.commande-nouveau-facteur').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].facteurAchat=Math.max(1,Number(x.value)||1)));
   document.querySelectorAll('.commande-qte').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].quantite=Number(x.value)||1));
   document.querySelectorAll('.commande-prix').forEach(x=>x.addEventListener('input',()=>commandeLignesTmp[Number(x.dataset.i)].prixUnitaire=Number(x.value)||0));
   document.querySelectorAll('[data-remove-ligne]').forEach(b=>b.addEventListener('click',()=>{commandeLignesTmp.splice(Number(b.dataset.removeLigne),1);if(!commandeLignesTmp.length)commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];render();}));
@@ -1849,7 +1788,7 @@ function attachCommandesHandlers(){
   document.getElementById('cancelEditCommande')?.addEventListener('click',()=>{state.editing.commandes=null;commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];commandeFormTmp={fournisseurId:'',date:todayISO(),observations:''};render();});
   document.getElementById('formCommande')?.addEventListener('submit',async e=>{
     e.preventDefault(); const fd=new FormData(e.target); commandeFormTmp.date=fd.get('date')||todayISO(); commandeFormTmp.fournisseurId=fd.get('fournisseurId')||''; commandeFormTmp.observations=(fd.get('observations')||'').trim();
-    commandeLignesTmp.forEach((l,i)=>{const nom=document.querySelector('.commande-ligne[data-i="'+i+'"] .commande-nouveau-nom');const cat=document.querySelector('.commande-ligne[data-i="'+i+'"] .commande-nouveau-categorie');if(nom)l.nomManuel=String(nom.value||'').trim();if(cat)l.categorieManuelle=cat.value||'Autres';});
+    commandeLignesTmp.forEach((l,i)=>{const row=document.querySelector('.commande-ligne[data-i="'+i+'"]');const nom=row?.querySelector('.commande-nouveau-nom');const cat=row?.querySelector('.commande-nouveau-categorie');const unite=row?.querySelector('.commande-nouveau-unite');const facteur=row?.querySelector('.commande-nouveau-facteur');if(nom)l.nomManuel=String(nom.value||'').trim();if(cat)l.categorieManuelle=cat.value||'Autres';if(unite)l.uniteAchat=unite.value||'Unité';if(facteur)l.facteurAchat=Math.max(1,Number(facteur.value)||1);});
     const editId=state.editing.commandes; const old=editId?state.commandes.find(c=>c.id===editId):null; let catalogueAjoute=false; const lignes=[]; const produitsDejaVus=new Set(); const nomsManuelsDejaVus=new Set();
     for(const l of commandeLignesTmp.filter(x=>x.produitId)){
       let produitId=l.produitId; let p=produitById(produitId);
@@ -1857,11 +1796,11 @@ function attachCommandesHandlers(){
         const nom=String(l.nomManuel||'').trim(); if(!nom){showToast('Saisissez le nom du nouveau bien');return;} const cleNom=nom.toLowerCase(); if(nomsManuelsDejaVus.has(cleNom)){showToast('Ce nouveau bien est déjà présent dans cette commande');return;} nomsManuelsDejaVus.add(cleNom);
         const existant=state.produits.find(x=>(x.nom||'').trim().toLowerCase()===nom.toLowerCase() && x.type==='Bien');
         if(existant){produitId=existant.id;p=existant;}
-        else {p={id:uid('prod'),nom,categorie:l.categorieManuelle||'Autres',type:'Bien',prix:0,stockInitial:0,entrees:0,seuilAlerte:5,actif:true,dateCreation:todayISO()};state.produits.push(p);produitId=p.id;catalogueAjoute=true;}
+        else {p={id:uid('prod'),nom,categorie:l.categorieManuelle||'Autres',type:'Bien',prix:0,stockInitial:0,entrees:0,seuilAlerte:5,uniteAchat:l.uniteAchat||'Unité',facteurAchat:Math.max(1,Number(l.facteurAchat)||1),actif:true,dateCreation:todayISO()};state.produits.push(p);produitId=p.id;catalogueAjoute=true;}
       }
       if(!p){showToast('Produit introuvable dans le catalogue');return;} if(produitsDejaVus.has(produitId)){showToast('Un même bien ne peut apparaître qu’une seule fois dans cette commande');return;} produitsDejaVus.add(produitId);
       const oldLine=old?.lignes?.find(x=>x.produitId===produitId || x.nom===p.nom);
-      lignes.push({produitId,nom:p.nom,quantite:Number(l.quantite)||1,quantiteRecue:Number(oldLine?.quantiteRecue||l.quantiteRecue||0),prixUnitaire:Number(l.prixUnitaire)||0});
+      lignes.push({produitId,nom:p.nom,quantite:Number(l.quantite)||1,quantiteRecue:Number(oldLine?.quantiteRecue||l.quantiteRecue||0),prixUnitaire:Number(l.prixUnitaire)||0,uniteAchat:uniteAchat(p),facteurAchat:facteurAchat(p)});
     }
     if(!fd.get('fournisseurId')||!lignes.length){showToast('Choisissez un fournisseur et au moins un bien');return;}
     const obj={id:old?.id||uid('cmd'),numero:old?.numero||'CMD-'+String(state.commandes.length+1).padStart(4,'0'),date:fd.get('date')||todayISO(),fournisseurId:fd.get('fournisseurId'),lignes,observations:fd.get('observations').trim(),statut:old?.statut||'Brouillon'};
@@ -2199,7 +2138,7 @@ function exportToExcel(){
       state.clients.map(c=>({ Nom:c.nom, 'Téléphone':c.telephone||'', Email:c.email||'', Adresse:c.adresse||'', 'Total achats (GNF)': totalAchatsClient(c.id) }))
     ), 'Clients');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-      state.produits.map(p=>({ Nom:p.nom, Catégorie:p.categorie||'', Type:p.type, 'Prix (GNF)':p.prix||0, 'Stock actuel': p.type==='Service'?'—':stockActuel(p), Statut: statutStock(p) }))
+      state.produits.map(p=>({ Nom:p.nom, Catégorie:p.categorie||'', Type:p.type, 'Unité achat':p.type==='Service'?'—':uniteAchat(p), 'Unités stock / conditionnement':p.type==='Service'?'—':facteurAchat(p), 'Prix (GNF)':p.prix||0, 'Stock actuel': p.type==='Service'?'—':stockActuel(p), Statut: statutStock(p) }))
     ), 'Produits');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
       state.ventes.map(v=>{

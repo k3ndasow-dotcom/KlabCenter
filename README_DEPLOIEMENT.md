@@ -92,3 +92,14 @@ Pour publier une nouvelle version, remplacer `index.html`, `sw.js` et ce fichier
 ## 11. Règle des commandes multi-lignes
 
 Un même bien ne peut apparaître qu’une seule fois dans une même commande fournisseur. Si le bien est déjà sélectionné sur une autre ligne, l’application refuse la sélection. Le contrôle est également répété au moment de l’enregistrement pour éviter les doublons issus d’une saisie manuelle ou d’une ancienne version. Le bien reste disponible dans une commande future.
+
+
+## 12. Unités d’achat et conditionnements
+
+Les biens peuvent désormais être achetés à l’unité, au paquet, au carton, à la boîte, au lot, au sac, au rouleau ou à la bouteille. Dans la fiche Produit, renseignez l’unité d’achat et le nombre d’unités de stock contenues dans un conditionnement.
+
+Exemple : si un carton contient 12 cahiers, choisissez `Carton` et indiquez `12`. Une commande de 5 cartons sera affichée comme 5 cartons, tandis que la réception ajoutera 60 unités au stock. Les ventes restent exprimées en unités de stock afin d’éviter les incohérences.
+
+Les anciennes fiches produits restent compatibles : lorsqu’aucun conditionnement n’est défini, KlabCenter utilise `Unité` avec un coefficient de 1. Les services ne possèdent aucun stock et ne sont pas concernés par les conditionnements.
+
+Lors de l’annulation d’une commande, le coefficient mémorisé dans la ligne de commande est utilisé pour reprendre exactement les unités ajoutées au stock.
