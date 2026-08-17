@@ -205,3 +205,11 @@ Les factures et les bons de commande affichent en bas à droite :
 > Mamadou Kenda SOW
 
 Cette signature apparaît dans l’aperçu, l’impression directe et le PDF téléchargé.
+
+
+## 24. Facture A4 compacte
+
+Les factures sont optimisées pour tenir sur une seule page A4 : logo réduit, marges resserrées, lignes plus compactes et boutons masqués lors de l’impression. La signature est placée après le total et constitue la dernière information du document :
+
+> Signé : Le PDG
+> Mamadou Kenda SOW

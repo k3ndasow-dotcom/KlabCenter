@@ -238,10 +238,21 @@
   .btn-danger{background:var(--danger); color:#fff;}
   .btn-danger:hover{background:#B23A4C;}
 
-  .invoice-view{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-top:10px;}
-  .invoice-view table{width:100%; border-collapse:collapse; font-size:12.5px; margin-top:10px;}
-  .invoice-view th,.invoice-view td{padding:7px 4px; border-bottom:1px solid var(--border); text-align:left;}
+  .invoice-view{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:12px; margin-top:8px;}
+  .invoice-view table{width:100%; border-collapse:collapse; font-size:11.5px; margin-top:7px;}
+  .invoice-view th,.invoice-view td{padding:4px 3px; border-bottom:1px solid var(--border); text-align:left;}
   .invoice-view th:last-child, .invoice-view td:last-child{text-align:right;}
+  @media print{
+    body{background:#fff !important;}
+    body *{visibility:hidden !important;}
+    #factureDetail,#factureDetail *{visibility:visible !important;}
+    #factureDetail{position:absolute;left:0;top:0;width:100%;padding:0;margin:0;}
+    .invoice-view{border:0;border-radius:0;box-shadow:none;padding:8mm;margin:0;}
+    .invoice-view img{width:56px !important;height:56px !important;}
+    .invoice-view table{font-size:10.5px;margin-top:5px;}
+    .invoice-view th,.invoice-view td{padding:3px 2px;}
+    .invoice-actions{display:none !important;}
+  }
 
   .splash-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:radial-gradient(circle at 18% 10%,rgba(90,140,240,.38),transparent 35%),linear-gradient(135deg,var(--navy-900),var(--navy-700) 58%,var(--blue-500));color:#fff;opacity:1;visibility:visible;transition:opacity .35s ease,visibility .35s ease;}
   .splash-screen.is-hidden{opacity:0;visibility:hidden;pointer-events:none;}
@@ -1580,7 +1591,7 @@ function showFactureDetail(id){
     <div class="invoice-view">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
         <div style="display:flex; align-items:flex-start; gap:10px;">
-          <img src="./logo-klabcenter.png" alt="Logo KlabCenter" style="width:74px;height:74px;object-fit:contain;border-radius:10px;">
+          <img src="./logo-klabcenter.png" alt="Logo KlabCenter" style="width:58px;height:58px;object-fit:contain;border-radius:8px;">
           <div>
           <div style="font-family:'Sora',sans-serif; font-weight:800; font-size:16px;">${esc(state.parametres.nom)}</div>
           <div class="helper">${esc(state.parametres.adresse)}<br>${esc(state.parametres.telephone)} · ${esc(state.parametres.email)}</div>
@@ -1600,7 +1611,7 @@ function showFactureDetail(id){
       </table>
       <div style="text-align:right; margin-top:10px; font-weight:800; font-family:'Sora',sans-serif; font-size:15px;">Total : ${fmtGNF(total)}</div>
       <div style="text-align:right; margin-top:42px; font-size:12px; line-height:1.5;"><div>Signé : Le PDG</div><strong>Mamadou Kenda SOW</strong></div>
-      <div style="display:flex; gap:8px; margin-top:12px;">
+      <div class="invoice-actions" style="display:flex; gap:8px; margin-top:10px;">
         <button class="btn btn-primary" style="flex:1;" id="btnDownloadPdf">⬇️ PDF</button>
         <button class="btn btn-ghost" style="flex:1;" onclick="window.print()">🖨️ Imprimer</button>
       </div>
@@ -1618,12 +1629,12 @@ async function telechargerFacturePdf(f, c, total){
   try{
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit:'mm', format:'a4' });
-    const marginX = 18; let y = 22;
+    const marginX = 12; let y = 17;
     const logo=await logoDataUrl();
-    if(logo){ doc.addImage(logo,'PNG',marginX,10,30,30); }
-    const headerX=logo?54:marginX;
+    if(logo){ doc.addImage(logo,'PNG',marginX,8,24,24); }
+    const headerX=logo?43:marginX;
 
-    doc.setFont('helvetica','bold'); doc.setFontSize(16);
+    doc.setFont('helvetica','bold'); doc.setFontSize(14);
     doc.text(state.parametres.nom||'KlabCenter', headerX, y); y += 7;
     doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(90);
     (state.parametres.adresse||'').split('\n').forEach(line=>{ doc.text(line, headerX, y); y += 5; });
@@ -1632,9 +1643,9 @@ async function telechargerFacturePdf(f, c, total){
     }
 
     doc.setTextColor(20); doc.setFont('helvetica','bold'); doc.setFontSize(13);
-    doc.text(f.numero, 190, 22, { align:'right' });
-    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(90);
-    doc.text(fmtDate(f.date), 190, 29, { align:'right' });
+    doc.text(f.numero, 198, 17, { align:'right' });
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(90);
+    doc.text(fmtDate(f.date), 198, 23, { align:'right' });
 
     y += 6;
     doc.setDrawColor(220); doc.line(marginX, y, 192, y); y += 8;
@@ -1647,33 +1658,34 @@ async function telechargerFacturePdf(f, c, total){
 
     y += 6;
     doc.setFillColor(19,44,84);
-    doc.rect(marginX, y, 174, 8, 'F');
+    doc.rect(marginX, y, 186, 7, 'F');
     doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(10);
-    doc.text('Article', marginX+3, y+5.5);
-    doc.text('Qté', 145, y+5.5);
-    doc.text('Total', 190, y+5.5, { align:'right' });
-    y += 8;
+    doc.text('Article', marginX+3, y+4.8);
+    doc.text('Qté', 150, y+4.8);
+    doc.text('Total', 198, y+4.8, { align:'right' });
+    y += 7;
 
     doc.setTextColor(30); doc.setFont('helvetica','normal');
+    const rowH = Math.min(6.2, Math.max(4.2, (238-y)/Math.max(1,f.lignes.length)));
+    doc.setFontSize(rowH<5 ? 7.5 : 9);
     f.lignes.forEach((l,i)=>{
-      const rowH = 8;
       if(i%2===1){ doc.setFillColor(246,248,252); doc.rect(marginX, y, 174, rowH, 'F'); }
-      doc.text(String(l.nom).slice(0,45), marginX+3, y+5.5);
-      doc.text(String(l.quantite), 145, y+5.5);
-      doc.text(fmtGNF(l.quantite*l.prixUnitaire), 190, y+5.5, { align:'right' });
+      doc.text(String(l.nom).slice(0,45), marginX+3, y+rowH-1.8);
+      doc.text(String(l.quantite), 145, y+rowH-1.8);
+      doc.text(fmtGNF(l.quantite*l.prixUnitaire), 198, y+rowH-1.8, { align:'right' });
       y += rowH;
     });
 
     y += 6;
-    doc.setDrawColor(220); doc.line(120, y, 192, y); y += 8;
-    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(20);
-    doc.text('Total', 145, y);
-    doc.text(fmtGNF(total), 190, y, { align:'right' });
+    doc.setDrawColor(220); doc.line(126, y, 198, y); y += 7;
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(20);
+    doc.text('Total', 150, y);
+    doc.text(fmtGNF(total), 198, y, { align:'right' });
 
     doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(20);
-    doc.text('Signé : Le PDG', 190, 262, { align:'right' });
+    doc.text('Signé : Le PDG', 198, 274, { align:'right' });
     doc.setFont('helvetica','bold');
-    doc.text('Mamadou Kenda SOW', 190, 269, { align:'right' });
+    doc.text('Mamadou Kenda SOW', 198, 281, { align:'right' });
 
     doc.save(`${f.numero}.pdf`);
   }catch(e){
