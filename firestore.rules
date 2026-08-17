@@ -1,74 +1,204 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function ownUser(userId) { return signedIn() && request.auth.uid == userId; }
-    function lienDe(uid) { return get(/databases/$(database)/documents/liens_employes/$(uid)); }
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownUser(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function lienDe(uid) {
+      return get(/databases/$(database)/documents/liens_employes/$(uid));
+    }
+
     function estEmployeDe(ownerUid) {
-      return signedIn() && exists(/databases/$(database)/documents/liens_employes/$(request.auth.uid))
-        && lienDe(request.auth.uid).data.ownerUid == ownerUid;
+      return signedIn()
+        && exists(/databases/$(database)/documents/liens_employes/$(request.auth.uid))
+        && lienDe(request.auth.uid).data.ownerUid == ownerUid
+        && lienDe(request.auth.uid).data.get('suspendu', false) == false;
     }
-    function roleEmploye() { return lienDe(request.auth.uid).data.role; }
-    function estSuspendu() { return lienDe(request.auth.uid).data.get('suspendu', false) == true; }
-    function accesEmploye(ownerUid, dataId) {
-      return estEmployeDe(ownerUid) && !estSuspendu() && (
-        dataId == 'kc_parametres' ||
-        (roleEmploye() == 'secretaire' && dataId in ['kc_clients','kc_produits','kc_ventes','kc_depenses','kc_factures','kc_fournisseurs','kc_commandes','kc_mouvements_stock']) ||
-        (roleEmploye() == 'tresorier' && dataId in ['kc_tresorerie','kc_commandes','kc_mouvements_stock'])
-      );
+
+    function roleEmploye() {
+      return lienDe(request.auth.uid).data.role;
     }
+
     function catalogueOwner() {
       return get(/databases/$(database)/documents/catalogue_public/klabcenter).data.ownerUid;
     }
+
     function isClient(uid) {
       return exists(/databases/$(database)/documents/clients_portal/$(uid))
         && get(/databases/$(database)/documents/clients_portal/$(uid)).data.role == 'client';
     }
 
+    function accesEmploye(ownerUid, dataId) {
+      return estEmployeDe(ownerUid)
+        && (
+          roleEmploye() == 'secretaire'
+          && dataId in [
+            'kc_clients',
+            'kc_produits',
+            'kc_ventes',
+            'kc_factures',
+            'kc_fournisseurs',
+            'kc_commandes',
+            'kc_mouvements_stock',
+            'kc_services'
+          ]
+          ||
+          roleEmploye() == 'tresorier'
+          && dataId in [
+            'kc_tresorerie',
+            'kc_depenses',
+            'kc_recettes',
+            'kc_commandes',
+            'kc_mouvements_stock'
+          ]
+        );
+    }
+
     match /liens_employes/{employeUid} {
-      allow read: if signedIn() && (request.auth.uid == employeUid || (resource != null && resource.data.ownerUid == request.auth.uid));
-      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow read: if signedIn() && (
+        request.auth.uid == employeUid
+        || (resource != null && resource.data.ownerUid == request.auth.uid)
+      );
+
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.role in ['secretaire', 'tresorier'];
+
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.role in ['secretaire', 'tresorier'];
+
+      allow delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
     }
 
     match /users/{userId} {
       allow read, create, update, delete: if ownUser(userId);
+
       match /data/{dataId} {
-        allow read, create, update, delete: if ownUser(userId) && dataId in ['kc_clients','kc_produits','kc_ventes','kc_depenses','kc_factures','kc_fournisseurs','kc_commandes','kc_mouvements_stock','kc_parametres','kc_tresorerie'];
+        allow read, create, update, delete: if ownUser(userId)
+          && dataId in [
+            'kc_clients',
+            'kc_produits',
+            'kc_ventes',
+            'kc_depenses',
+            'kc_factures',
+            'kc_fournisseurs',
+            'kc_commandes',
+            'kc_mouvements_stock',
+            'kc_parametres',
+            'kc_tresorerie',
+            'kc_services',
+            'kc_recettes',
+            'kc_utilisateurs'
+          ];
+
         allow read, create, update: if accesEmploye(userId, dataId);
       }
     }
 
     match /journal_employes/{entryId} {
-      allow create: if signedIn() && estEmployeDe(request.resource.data.ownerUid) && !estSuspendu() && request.resource.data.employeUid == request.auth.uid && request.resource.data.role == roleEmploye();
-      allow read: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if signedIn()
+        && estEmployeDe(request.resource.data.ownerUid)
+        && request.resource.data.employeUid == request.auth.uid
+        && request.resource.data.role == roleEmploye();
+
+      allow read: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+
       allow update, delete: if false;
     }
 
     match /catalogue_public/{catalogueId} {
       allow read: if true;
-      allow create, update: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
-      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
     }
 
     match /clients_portal/{clientUid} {
-      allow create: if ownUser(clientUid) && request.resource.data.role == 'client' && request.resource.data.ownerUid == catalogueOwner();
-      allow read, update: if ownUser(clientUid) || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create: if signedIn()
+        && request.auth.uid == clientUid
+        && request.resource.data.role == 'client'
+        && request.resource.data.ownerUid == catalogueOwner();
+
+      allow read: if signedIn() && (
+        request.auth.uid == clientUid
+        || (resource != null && resource.data.ownerUid == request.auth.uid)
+      );
+
+      allow update: if signedIn() && (
+        request.auth.uid == clientUid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.role == 'client'
+        || resource.data.ownerUid == request.auth.uid
+      );
+
       allow delete: if false;
     }
 
     match /demandes_clients/{demandeId} {
-      allow create: if signedIn() && isClient(request.auth.uid) && request.resource.data.clientUid == request.auth.uid && request.resource.data.ownerUid == catalogueOwner();
-      allow read: if signedIn() && (resource.data.clientUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
-      allow update: if signedIn() && resource.data.ownerUid == request.auth.uid;
-      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if signedIn()
+        && isClient(request.auth.uid)
+        && request.resource.data.clientUid == request.auth.uid
+        && request.resource.data.ownerUid == catalogueOwner();
+
+      allow read: if signedIn() && (
+        resource.data.clientUid == request.auth.uid
+        || resource.data.ownerUid == request.auth.uid
+      );
+
+      allow update, delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
     }
 
     match /messages_clients/{messageId} {
-      allow create: if (signedIn() && isClient(request.auth.uid) && request.resource.data.clientUid == request.auth.uid && request.resource.data.ownerUid == catalogueOwner())
-        || (signedIn() && request.resource.data.ownerUid == request.auth.uid);
-      allow read: if signedIn() && (resource.data.clientUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
-      allow update, delete: if false;
+      allow create: if signedIn() && (
+        (
+          isClient(request.auth.uid)
+          && request.resource.data.clientUid == request.auth.uid
+          && request.resource.data.ownerUid == catalogueOwner()
+        )
+        || request.resource.data.ownerUid == request.auth.uid
+      );
+
+      allow read: if signedIn() && (
+        resource.data.clientUid == request.auth.uid
+        || resource.data.ownerUid == request.auth.uid
+      );
+
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    // Compatibilité avec d’éventuelles intégrations futures hors du stockage principal.
+    match /kc_parametres/{paramId} {
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow read, update, delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /kc_tresorerie/{transactionId} {
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow read, update, delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+      allow read, create, update: if signedIn()
+        && isEmployeeOf(resource.data.ownerUid)
+        && roleEmploye() == 'tresorier';
     }
   }
 }

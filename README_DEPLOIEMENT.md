@@ -226,3 +226,21 @@ Les services demandés depuis le portail client bénéficient automatiquement d�
 Le catalogue public contient uniquement les éléments actifs. Les coûts d’achat, le stock interne, les dépenses, les fournisseurs et la trésorerie ne sont jamais exposés au client. Le catalogue est synchronisé automatiquement après une modification des produits par le propriétaire.
 
 Les règles Firestore à publier pour cette version sont celles du fichier `firestore.rules`. Elles protègent les collections `clients_portal`, `catalogue_public`, `demandes_clients` et `messages_clients` en séparant l’accès du client et celui de l’administrateur.
+
+
+## 25. Tableau de bord interne modernisé — version v25
+
+Le tableau de bord affiche maintenant des indicateurs opérationnels pour les demandes clients et les messages. Les cartes « Demandes ouvertes » et « Messages non lus » montrent immédiatement le nombre d’éléments à traiter. Le menu « Demandes clients » affiche également un compteur combiné.
+
+La rubrique « Demandes clients » distingue les demandes ouvertes, les messages reçus et les réponses envoyées. Un message reçu est affiché en bleu ; une réponse envoyée par KlabCenter est affichée en vert. Un message non lu reçoit une mise en évidence supplémentaire et peut être marqué comme lu avec le bouton prévu. Les changements se synchronisent automatiquement avec Firebase.
+
+Les demandes clients restent séparées des commandes fournisseurs. Leur traitement ne modifie pas automatiquement le stock. Le service worker est passé en v25 pour diffuser l’interface modernisée sur ordinateur et mobile.
+
+
+## 26. Règles Firebase adaptées — version v26
+
+L’archive v26 inclut une version fusionnée de `firestore.rules`. Elle reprend les rôles employés et les catégories de données supplémentaires fournies dans la nouvelle version, tout en conservant les autorisations nécessaires au portail client : `catalogue_public`, `clients_portal`, `demandes_clients` et `messages_clients`.
+
+Les demandes et messages restent liés au propriétaire du catalogue. Un client ne peut consulter que son compte, ses demandes et sa conversation. Le propriétaire peut traiter les demandes et marquer les messages reçus comme lus. Les autres clients ne peuvent jamais accéder à ces données.
+
+Le stockage principal de KlabCenter reste situé sous `users/{userId}/data`. Les catégories `kc_services`, `kc_recettes` et `kc_utilisateurs` ont été ajoutées aux listes compatibles sans modifier les anciennes données. Le service worker est passé en v26.

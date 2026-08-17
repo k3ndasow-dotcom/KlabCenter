@@ -93,6 +93,8 @@
     transition:.15s;
   }
   .tab-btn.active{background:#fff; color:var(--navy-800); border-color:#fff;}
+  .tab-count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:999px;background:var(--danger);color:#fff;font-size:10px;font-weight:800;vertical-align:middle;}
+  .tab-count.zero{background:rgba(255,255,255,.2);}.tab-btn.active .tab-count.zero{background:var(--blue-100);color:var(--blue-500);}
 
   main{padding:16px; max-width:720px; margin:0 auto;}
   .section-title{font-size:19px; font-weight:700; margin:4px 0 14px;}
@@ -266,6 +268,23 @@
   @media (prefers-reduced-motion: reduce){ .splash-content{animation:none;} .splash-screen{transition:none;} }
   .helper{font-size:11px; color:var(--text-500); margin-top:6px; line-height:1.5;}
   .lignes-row{display:grid; grid-template-columns:2fr 1fr; gap:8px; align-items:end; margin-bottom:8px;}
+  .dashboard-hero{background:linear-gradient(135deg,var(--navy-900),var(--navy-700) 62%,var(--blue-500));color:#fff;border-radius:18px;padding:18px;margin-bottom:16px;box-shadow:0 12px 30px rgba(19,44,84,.2);}
+  .dashboard-hero h2{font-size:18px;margin:0 0 5px;font-weight:800;}
+  .dashboard-hero p{margin:0;color:#DCE6FA;font-size:12px;line-height:1.5;}
+  .dashboard-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+  .dashboard-actions .btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;}
+  .metric-card{display:flex;align-items:center;gap:11px;min-height:78px;}
+  .metric-icon{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;font-size:17px;background:var(--blue-100);flex:0 0 auto;}
+  .metric-icon.warn{background:var(--warn-bg);}.metric-icon.danger{background:var(--danger-bg);}.metric-icon.ok{background:var(--ok-bg);}
+  .metric-copy{min-width:0;}.metric-copy .kpi-label{font-size:9.5px;}.metric-copy .kpi-value{font-size:20px;margin-top:2px;}
+  .inbox-row{border-left:4px solid var(--blue-500);background:#F7FAFF;border-radius:12px;padding:11px 12px;margin-bottom:8px;}
+  .inbox-row.received{border-left-color:var(--blue-500);background:#F3F7FF;}.inbox-row.sent{border-left-color:var(--ok);background:#F2FBF7;}
+  .inbox-row.unread{box-shadow:0 0 0 2px rgba(47,111,228,.12);font-weight:600;}
+  .inbox-row .inbox-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:4px;}
+  .message-badge{font-size:10px;font-weight:700;border-radius:999px;padding:3px 8px;white-space:nowrap;}.message-badge.received{color:var(--blue-500);background:var(--blue-100);}.message-badge.sent{color:var(--ok);background:var(--ok-bg);}.message-badge.unread{color:var(--danger);background:var(--danger-bg);}
+  .status-badge{font-size:10px;font-weight:700;border-radius:999px;padding:4px 8px;background:var(--warn-bg);color:var(--warn);white-space:nowrap;}
+  .dashboard-columns{display:grid;grid-template-columns:1fr;gap:16px;}.dashboard-list{max-height:290px;overflow:auto;}
+  @media (min-width:900px){.dashboard-columns{grid-template-columns:1fr 1fr;}}
   ::selection{background:var(--blue-300);}
   @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
 </style>
@@ -476,10 +495,12 @@ async function loadAll(){
     }
   }catch(e){ console.error('Erreur de chargement', e); }
   state.loading = false;
+  if((estProprietaire() || state.role==='secretaire') && dataOwnerUid) await loadDemandesClientsAdmin().catch(e=>console.warn('Demandes clients non chargées',e));
   render();
   updateConnectionBadge();
   ensureUserProfile();
   startRealtimeSync();
+  startDemandesClientsRealtime();
   if(estProprietaire()) publishPublicCatalogue();
 }
 
@@ -848,7 +869,7 @@ function getTabs(){ return TABS_ALL.filter(t=>t.roles.includes(state.role)); }
 function renderTabs(){
   const nav = document.getElementById('tabs');
   const tabs = getTabs();
-  nav.innerHTML = tabs.map(t=>`<button class="tab-btn ${state.activeTab===t.id?'active':''}" data-tab="${t.id}">${t.label}</button>`).join('');
+  nav.innerHTML = tabs.map(t=>{const count=t.id==='demandesClients'?demandesClientsAdmin.filter(d=>!['Acceptée','Refusée','Terminée'].includes(d.status||'Envoyée')).length:0;const unread=t.id==='demandesClients'?messagesClientsAdmin.filter(m=>m.senderRole==='client'&&m.luAdmin!==true).length:0;const badge=t.id==='demandesClients'?`<span class="tab-count ${count+unread===0?'zero':''}">${count+unread}</span>`:'';return `<button class="tab-btn ${state.activeTab===t.id?'active':''}" data-tab="${t.id}">${t.label}${badge}</button>`;}).join('');
   nav.querySelectorAll('.tab-btn').forEach(b=>{
     b.addEventListener('click', ()=>{ state.activeTab=b.dataset.tab; render(); });
   });
@@ -868,20 +889,31 @@ function setHeaderDate(){
   el.innerHTML = d.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short'}) + '<br>' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 }
 
-let demandesClientsAdmin=[]; let messagesClientsAdmin=[];
+let demandesClientsAdmin=[]; let messagesClientsAdmin=[]; let unsubscribeDemandesClientsAdmin=null; let unsubscribeMessagesClientsAdmin=null;
 async function loadDemandesClientsAdmin(){
   if(!dataOwnerUid) return;
   const [ds,ms]=await Promise.all([db.collection('demandes_clients').where('ownerUid','==',dataOwnerUid).get(),db.collection('messages_clients').where('ownerUid','==',dataOwnerUid).get()]);
   demandesClientsAdmin=ds.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
   messagesClientsAdmin=ms.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0));
 }
+function startDemandesClientsRealtime(){
+  if(unsubscribeDemandesClientsAdmin) unsubscribeDemandesClientsAdmin();
+  if(unsubscribeMessagesClientsAdmin) unsubscribeMessagesClientsAdmin();
+  if(!dataOwnerUid || !(estProprietaire() || state.role==='secretaire')) return;
+  unsubscribeDemandesClientsAdmin=db.collection('demandes_clients').where('ownerUid','==',dataOwnerUid).onSnapshot(s=>{demandesClientsAdmin=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));if(!state.loading) render();},e=>console.warn('Synchronisation demandes indisponible',e));
+  unsubscribeMessagesClientsAdmin=db.collection('messages_clients').where('ownerUid','==',dataOwnerUid).onSnapshot(s=>{messagesClientsAdmin=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));if(!state.loading) render();},e=>console.warn('Synchronisation messages indisponible',e));
+}
 function viewDemandesClients(){
   const conv={}; messagesClientsAdmin.forEach(m=>{(conv[m.conversationId]||(conv[m.conversationId]=[])).push(m);});
-  return `<div class="section-title">Demandes & messages clients</div><div class="section-sub">Répondez aux besoins reçus sans modifier le stock avant votre validation.</div><div class="content-grid"><div class="card"><h3>📨 Demandes reçues</h3>${demandesClientsAdmin.length?`<div class="list">${demandesClientsAdmin.map(d=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(d.itemName||'Demande')} · ${esc(d.clientEmail||'Client')}</div><div class="row-meta">${d.quantite||1} · Total net ${fmtGNF(d.total||0)} · ${esc(d.status||'Envoyée')}</div><div class="helper">Prix catalogue : ${fmtGNF((d.prixCatalogue||d.prixUnitaire||0)*(d.quantite||1))}${Number(d.remisePourcent)>0?` · Remise en ligne ${d.remisePourcent}%`:''}</div><div class="helper">${esc(d.message||'')}</div></div><select data-client-demand-status="${d.id}" style="width:auto;"><option ${d.status==='Envoyée'?'selected':''}>Envoyée</option><option ${d.status==='En discussion'?'selected':''}>En discussion</option><option ${d.status==='Acceptée'?'selected':''}>Acceptée</option><option ${d.status==='Refusée'?'selected':''}>Refusée</option><option ${d.status==='Terminée'?'selected':''}>Terminée</option></select></div>`).join('')}</div>`:'<div class="empty">Aucune demande client.</div>'}</div><div class="card"><h3>💬 Messages</h3>${Object.keys(conv).length?Object.entries(conv).map(([id,msgs])=>{const last=msgs[msgs.length-1];return `<div class="row-item" style="display:block;margin-bottom:8px;"><div class="row-title">${esc(last.clientEmail||'Client')}</div><div class="helper">${esc(last.text||'')}</div><form class="client-reply-form" data-conversation="${id}" data-client-uid="${last.clientUid}"><input name="text" required placeholder="Répondre au client…"><button class="btn btn-primary btn-block" type="submit">Répondre</button></form></div>`;}).join(''):`<div class="empty">Aucun message client.</div>`}</div></div>`;
+  const unread=messagesClientsAdmin.filter(m=>m.senderRole==='client'&&m.luAdmin!==true).length;
+  const open=demandesClientsAdmin.filter(d=>!['Acceptée','Refusée','Terminée'].includes(d.status||'Envoyée')).length;
+  const inbox=[...messagesClientsAdmin].sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+  return `<div class="section-title">Demandes & messages clients</div><div class="section-sub">Un espace de suivi clair pour traiter les demandes, répondre et ne rien oublier.</div><div class="kpi-grid"><div class="kpi-card metric-card"><div class="metric-icon">📨</div><div class="metric-copy"><div class="kpi-label">Demandes ouvertes</div><div class="kpi-value num warn">${open}</div></div></div><div class="kpi-card metric-card"><div class="metric-icon danger">💬</div><div class="metric-copy"><div class="kpi-label">Messages non lus</div><div class="kpi-value num ${unread?'bad':'good'}">${unread}</div></div></div></div><div class="dashboard-columns"><div class="card"><h3>📨 Demandes reçues <span class="status-badge">${open} à traiter</span></h3>${demandesClientsAdmin.length?`<div class="list dashboard-list">${demandesClientsAdmin.map(d=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(d.itemName||'Demande')} · ${esc(d.clientEmail||'Client')}</div><div class="row-meta">${d.quantite||1} · Total net ${fmtGNF(d.total||0)} · ${esc(d.status||'Envoyée')}</div><div class="helper">Prix catalogue : ${fmtGNF((d.prixCatalogue||d.prixUnitaire||0)*(d.quantite||1))}${Number(d.remisePourcent)>0?` · Remise en ligne ${d.remisePourcent}%`:''}</div><div class="helper">${esc(d.message||'')}</div></div><select data-client-demand-status="${d.id}" style="width:auto;"><option ${d.status==='Envoyée'?'selected':''}>Envoyée</option><option ${d.status==='En discussion'?'selected':''}>En discussion</option><option ${d.status==='Acceptée'?'selected':''}>Acceptée</option><option ${d.status==='Refusée'?'selected':''}>Refusée</option><option ${d.status==='Terminée'?'selected':''}>Terminée</option></select></div>`).join('')}</div>`:'<div class="empty">Aucune demande client.</div>'}</div><div class="card"><h3>💬 Boîte de réception <span class="status-badge">${unread} non lu(s)</span></h3>${inbox.length?`<div class="dashboard-list">${inbox.map(m=>`<div class="inbox-row ${m.senderRole==='client'?'received':'sent'} ${m.senderRole==='client'&&m.luAdmin!==true?'unread':''}"><div class="inbox-head"><strong>${m.senderRole==='client'?'Message reçu':'Réponse envoyée'}</strong><span class="message-badge ${m.senderRole==='client'?(m.luAdmin===true?'received':'unread'):'sent'}">${m.senderRole==='client'?(m.luAdmin===true?'Lu':'Non lu'):'Envoyé'}</span></div><div class="row-meta">${esc(m.clientEmail||'Client')}</div><div>${esc(m.text||'')}</div>${m.senderRole==='client'&&m.luAdmin!==true?`<div class="btn-row"><button class="btn btn-ghost" data-mark-client-message="${m.id}">Marquer comme lu</button></div>`:''}</div>`).join('')}</div>`:'<div class="empty">Aucun message client.</div>'}</div></div><div class="card"><h3>↩️ Répondre aux conversations</h3>${Object.keys(conv).length?Object.entries(conv).map(([id,msgs])=>{const last=msgs[msgs.length-1];return `<div class="row-item" style="display:block;margin-bottom:8px;"><div class="row-title">${esc(last.clientEmail||'Client')}</div><div class="helper">Dernier message : ${esc(last.text||'')}</div><form class="client-reply-form" data-conversation="${id}" data-client-uid="${last.clientUid}"><input name="text" required placeholder="Répondre au client…"><button class="btn btn-primary btn-block" type="submit">Répondre</button></form></div>`;}).join(''):`<div class="empty">Aucune conversation client.</div>`}</div>`;
 }
 async function attachDemandesClientsHandlers(){
-  document.querySelectorAll('[data-client-demand-status]').forEach(s=>s.addEventListener('change',async()=>{await db.collection('demandes_clients').doc(s.dataset.clientDemandStatus).update({status:s.value,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});showToast('Statut mis à jour');}));
-  document.querySelectorAll('.client-reply-form').forEach(f=>f.addEventListener('submit',async e=>{e.preventDefault();const text=String(new FormData(f).get('text')||'').trim();if(!text)return;await db.collection('messages_clients').add({ownerUid:dataOwnerUid,clientUid:f.dataset.clientUid,conversationId:f.dataset.conversation,senderUid:currentUser.uid,senderRole:'admin',text,createdAt:firebase.firestore.FieldValue.serverTimestamp()});f.reset();showToast('Réponse envoyée');}));
+  document.querySelectorAll('[data-client-demand-status]').forEach(s=>s.addEventListener('change',async()=>{await db.collection('demandes_clients').doc(s.dataset.clientDemandStatus).update({status:s.value,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});await loadDemandesClientsAdmin();render();showToast('Statut mis à jour');}));
+  document.querySelectorAll('[data-mark-client-message]').forEach(b=>b.addEventListener('click',async()=>{await db.collection('messages_clients').doc(b.dataset.markClientMessage).update({luAdmin:true,luAt:firebase.firestore.FieldValue.serverTimestamp()});await loadDemandesClientsAdmin();render();showToast('Message marqué comme lu');}));
+  document.querySelectorAll('.client-reply-form').forEach(f=>f.addEventListener('submit',async e=>{e.preventDefault();const text=String(new FormData(f).get('text')||'').trim();if(!text)return;await db.collection('messages_clients').add({ownerUid:dataOwnerUid,clientUid:f.dataset.clientUid,conversationId:f.dataset.conversation,senderUid:currentUser.uid,senderRole:'admin',text,createdAt:firebase.firestore.FieldValue.serverTimestamp(),luClient:false});f.reset();await loadDemandesClientsAdmin();render();showToast('Réponse envoyée');}));
 }
 
 function render(){
@@ -913,63 +945,26 @@ function render(){
 function viewAccueil(){
   const alertes = state.produits.filter(p=>p.actif!==false && ['RUPTURE','FAIBLE'].includes(statutStock(p)));
   const dernieresVentes = [...state.ventes].sort((a,b)=> (b.date||'').localeCompare(a.date||'')).slice(0,5);
+  const demandesOuvertes=demandesClientsAdmin.filter(d=>!['Acceptée','Refusée','Terminée'].includes(d.status||'Envoyée'));
+  const messagesNonLus=messagesClientsAdmin.filter(m=>m.senderRole==='client' && m.luAdmin!==true);
+  const derniersMessages=[...messagesClientsAdmin].sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).slice(0,5);
   return `
-    <div class="section-title">Tableau de bord</div>
-    <div class="section-sub">Vue d'ensemble de votre activité · Version 2026.08</div>
+    <div class="dashboard-hero"><h2>Bonjour, ${esc(state.employeNom||'KlabCenter')}.</h2><p>Voici les éléments qui nécessitent votre attention aujourd’hui.</p><div class="dashboard-actions"><button class="btn" data-quick-tab="demandesClients">📨 Ouvrir les demandes</button><button class="btn" data-quick-tab="commandes">📋 Préparer une commande</button><button class="btn" data-quick-tab="ventes">🛒 Nouvelle vente</button></div></div>
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Chiffre d'affaires</div><div class="kpi-value num good">${fmtGNF(caTotal())}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Dépenses</div><div class="kpi-value num bad">${fmtGNF(depensesTotal())}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Bénéfice estimé</div><div class="kpi-value num ${beneficeEstime()>=0?'good':'bad'}">${fmtGNF(beneficeEstime())}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Trésorerie dispo.</div><div class="kpi-value num">${fmtGNF(tresorerieDisponible())}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Ventes enregistrées</div><div class="kpi-value num">${state.ventes.length}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Stock à surveiller</div><div class="kpi-value num ${alertes.length>0?'warn':'good'}">${alertes.length}</div></div>
+      <div class="kpi-card metric-card"><div class="metric-icon">💰</div><div class="metric-copy"><div class="kpi-label">Chiffre d’affaires</div><div class="kpi-value num good">${fmtGNF(caTotal())}</div></div></div>
+      <div class="kpi-card metric-card"><div class="metric-icon danger">💸</div><div class="metric-copy"><div class="kpi-label">Dépenses</div><div class="kpi-value num bad">${fmtGNF(depensesTotal())}</div></div></div>
+      <div class="kpi-card metric-card"><div class="metric-icon ok">📈</div><div class="metric-copy"><div class="kpi-label">Bénéfice estimé</div><div class="kpi-value num ${beneficeEstime()>=0?'good':'bad'}">${fmtGNF(beneficeEstime())}</div></div></div>
+      <div class="kpi-card metric-card"><div class="metric-icon warn">⚠️</div><div class="metric-copy"><div class="kpi-label">Stock à surveiller</div><div class="kpi-value num ${alertes.length?'warn':'good'}">${alertes.length}</div></div></div>
+      <div class="kpi-card metric-card"><div class="metric-icon">📨</div><div class="metric-copy"><div class="kpi-label">Demandes ouvertes</div><div class="kpi-value num ${demandesOuvertes.length?'warn':'good'}">${demandesOuvertes.length}</div></div></div>
+      <div class="kpi-card metric-card"><div class="metric-icon danger">💬</div><div class="metric-copy"><div class="kpi-label">Messages non lus</div><div class="kpi-value num ${messagesNonLus.length?'bad':'good'}">${messagesNonLus.length}</div></div></div>
     </div>
-
-    <div class="card quick-actions">
-      <h3>⚡ Actions rapides</h3>
-      <div class="btn-row">
-        <button class="btn btn-primary" data-quick-tab="ventes">Nouvelle vente</button>
-        <button class="btn btn-ghost" data-quick-tab="commandes">Préparer une commande</button>
-        <button class="btn btn-ghost" data-quick-tab="clients">Ajouter un client</button>
-      </div>
+    <div class="dashboard-columns">
+      <div class="card"><h3>📨 Demandes clients <span class="status-badge">${demandesOuvertes.length} en attente</span></h3>${demandesOuvertes.length?`<div class="dashboard-list">${demandesOuvertes.slice(0,5).map(d=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(d.itemName||'Demande')} · ${esc(d.clientEmail||'Client')}</div><div class="row-meta">${d.quantite||1} · ${fmtGNF(d.total||0)} · ${esc(d.status||'Envoyée')}</div></div><span class="pill pill-warn">À traiter</span></div>`).join('')}</div>`:'<div class="empty">Aucune demande en attente.</div>'}<div class="btn-row"><button class="btn btn-primary" data-quick-tab="demandesClients">Voir toutes les demandes</button></div></div>
+      <div class="card"><h3>💬 Centre de messages <span class="status-badge">${messagesNonLus.length} non lu(s)</span></h3>${derniersMessages.length?`<div class="dashboard-list">${derniersMessages.map(m=>`<div class="inbox-row ${m.senderRole==='client'?'received':'sent'} ${m.senderRole==='client'&&m.luAdmin!==true?'unread':''}"><div class="inbox-head"><strong>${m.senderRole==='client'?'Message reçu':'Réponse envoyée'}</strong><span class="message-badge ${m.senderRole==='client'?'received':'sent'}">${m.senderRole==='client'?(m.luAdmin===true?'Lu':'Non lu'):'Envoyé'}</span></div><div class="row-meta">${esc(m.clientEmail||'Client')}</div><div>${esc(m.text||'')}</div></div>`).join('')}</div>`:'<div class="empty">Aucun message.</div>'}<div class="btn-row"><button class="btn btn-primary" data-quick-tab="demandesClients">Ouvrir la messagerie</button></div></div>
     </div>
-
-    <div class="card">
-      <h3>📈 Évolution (6 derniers mois)</h3>
-      <canvas id="chartCA" height="190"></canvas>
-    </div>
-
-    ${alertes.length>0 ? `
-    <div class="card">
-      <h3>⚠️ Articles à réapprovisionner</h3>
-      <div class="list">
-        ${alertes.map(p=>`
-          <div class="row-item">
-            <div class="row-main">
-              <div class="row-title">${esc(p.nom)}</div>
-              <div class="row-meta">Stock actuel : ${stockActuel(p)}</div>
-            </div>
-            <span class="pill ${statutStock(p)==='RUPTURE'?'pill-danger':'pill-warn'}">${statutStock(p)}</span>
-          </div>`).join('')}
-      </div>
-    </div>` : ''}
-
-    <div class="card">
-      <h3>🕐 Dernières ventes</h3>
-      ${dernieresVentes.length===0 ? `<div class="empty">Aucune vente enregistrée pour l'instant.</div>` : `
-      <div class="list">
-        ${dernieresVentes.map(v=>{
-          const p = produitById(v.produitId); const c = clientById(v.clientId);
-          return `<div class="row-item">
-            <div class="row-main">
-              <div class="row-title">${esc(p?p.nom:'—')}</div>
-              <div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)}</div>
-            </div>
-            <div class="row-amount">${fmtGNF(ventesTotal(v))}</div>
-          </div>`;
-        }).join('')}
-      </div>`}
-    </div>
+    <div class="card"><h3>📈 Évolution (6 derniers mois)</h3><canvas id="chartCA" height="190"></canvas></div>
+    ${alertes.length>0 ? `<div class="card"><h3>⚠️ Articles à réapprovisionner</h3><div class="list">${alertes.map(p=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(p.nom)}</div><div class="row-meta">Stock actuel : ${stockActuel(p)}</div></div><span class="pill ${statutStock(p)==='RUPTURE'?'pill-danger':'pill-warn'}">${statutStock(p)}</span></div>`).join('')}</div></div>` : ''}
+    <div class="card"><h3>🕐 Dernières ventes</h3>${dernieresVentes.length===0 ? `<div class="empty">Aucune vente enregistrée pour l'instant.</div>` : `<div class="list">${dernieresVentes.map(v=>{const p=produitById(v.produitId);const c=clientById(v.clientId);return `<div class="row-item"><div class="row-main"><div class="row-title">${esc(p?p.nom:'—')}</div><div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)}</div></div><div class="row-amount">${fmtGNF(ventesTotal(v))}</div></div>`;}).join('')}</div>`}</div>
   `;
 }
 function monthlyData(months){
