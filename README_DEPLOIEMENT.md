@@ -213,3 +213,16 @@ Les factures sont optimisées pour tenir sur une seule page A4 : logo réduit, m
 
 > Signé : Le PDG
 > Mamadou Kenda SOW
+
+
+## Espace client intégré — version v24
+
+L’espace client est accessible depuis l’écran de connexion avec une adresse email et un mot de passe. Le client consulte les biens et activités/services actifs, envoie des demandes sans paiement en ligne et échange avec KlabCenter dans une conversation privée.
+
+Les demandes sont visibles dans l’onglet « Demandes clients » de l’administration. Elles utilisent les statuts « Envoyée », « En discussion », « Acceptée », « Refusée » et « Terminée ». Une demande client ne modifie pas automatiquement le stock ; elle doit être traitée et validée par KlabCenter.
+
+Les services demandés depuis le portail client bénéficient automatiquement d’une remise de 10 %. Le client voit le prix catalogue, le montant de la remise et le total net. Les biens et les demandes saisies directement dans l’administration ne bénéficient pas automatiquement de cette remise.
+
+Le catalogue public contient uniquement les éléments actifs. Les coûts d’achat, le stock interne, les dépenses, les fournisseurs et la trésorerie ne sont jamais exposés au client. Le catalogue est synchronisé automatiquement après une modification des produits par le propriétaire.
+
+Les règles Firestore à publier pour cette version sont celles du fichier `firestore.rules`. Elles protègent les collections `clients_portal`, `catalogue_public`, `demandes_clients` et `messages_clients` en séparant l’accès du client et celui de l’administrateur.

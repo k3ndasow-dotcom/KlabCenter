@@ -480,6 +480,7 @@ async function loadAll(){
   updateConnectionBadge();
   ensureUserProfile();
   startRealtimeSync();
+  if(estProprietaire()) publishPublicCatalogue();
 }
 
 const LABELS_DONNEES = {
@@ -509,12 +510,71 @@ async function journaliserAction(key, action){
 async function persist(key, action){
   const ok = await storageSet(KEYS[key], state[key]);
   if(!ok) showToast("⚠️ Donnée conservée localement, mais non confirmée par Firebase. Reconnectez-vous avant de fermer.");
+  if(key==='produits' && estProprietaire()) await publishPublicCatalogue();
   if(action) journaliserAction(key, action);
 }
 
 /* ============================================================
    AUTHENTIFICATION — un seul compte, propre à votre entreprise
    ============================================================ */
+let clientMode = false;
+let clientOwnerUid = null;
+let clientProfile = null;
+let clientCatalogue = [];
+let clientDemandes = [];
+let clientMessages = [];
+let clientAuthIntent = false;
+let clientTab = 'catalogue';
+
+function renderClientLogin(mode='login', errorMsg=''){
+  const hb = document.getElementById('btnHeaderLogout'); if(hb) hb.style.display='none';
+  document.getElementById('tabs').innerHTML = '';
+  document.getElementById('app').innerHTML = `<div style="max-width:420px;margin:40px auto;"><div class="card"><h3>👤 Espace client — ${mode==='signup'?'Créer un compte':'Connexion'}</h3><div class="section-sub">Consultez les biens et services de KlabCenter et envoyez votre demande.</div><form id="formClientAuth"><div class="field" style="margin-bottom:10px;"><label>Email *</label><input name="email" type="email" required placeholder="client@exemple.com"></div><div class="field" style="margin-bottom:10px;"><label>Mot de passe *</label><input name="password" type="password" required minlength="6" placeholder="6 caractères minimum"></div>${mode==='signup'?'<div class="field" style="margin-bottom:10px;"><label>Nom complet *</label><input name="nom" required placeholder="Votre nom"></div>':''}${errorMsg?`<div class="helper" style="color:var(--danger);">${esc(errorMsg)}</div>`:''}<button class="btn btn-primary btn-block" type="submit">${mode==='signup'?'Créer mon compte':'Se connecter'}</button></form><div class="helper" style="text-align:center;margin-top:12px;">${mode==='signup'?`Déjà inscrit ? <a href="#" id="clientToLogin" style="color:var(--blue-500);font-weight:600;">Se connecter</a>`:`Première visite ? <a href="#" id="clientToSignup" style="color:var(--blue-500);font-weight:600;">Créer un compte client</a>`}<br><a href="#" id="backAdminLogin" style="color:var(--text-500);">Accès administration</a></div></div></div>`;
+  document.getElementById('formClientAuth').addEventListener('submit', async e=>{
+    e.preventDefault(); const fd=new FormData(e.target); const email=String(fd.get('email')||'').trim(); const password=String(fd.get('password')||''); clientAuthIntent=true;
+    try{
+      if(mode==='signup'){
+        const cat=await db.collection('catalogue_public').doc('klabcenter').get();
+        if(!cat.exists) throw {code:'client/catalogue-unavailable'};
+        const cred=await auth.createUserWithEmailAndPassword(email,password);
+        await db.collection('clients_portal').doc(cred.user.uid).set({ownerUid:cat.data().ownerUid,email,nom:String(fd.get('nom')||'').trim(),role:'client',createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+      }else await auth.signInWithEmailAndPassword(email,password);
+    }catch(err){ clientAuthIntent=false; renderClientLogin(mode, err.code==='client/catalogue-unavailable'?'Le catalogue client n’est pas encore publié. Réessayez plus tard.':traduireErreurAuth(err)); }
+  });
+  document.getElementById('clientToSignup')?.addEventListener('click',e=>{e.preventDefault();renderClientLogin('signup');});
+  document.getElementById('clientToLogin')?.addEventListener('click',e=>{e.preventDefault();renderClientLogin('login');});
+  document.getElementById('backAdminLogin')?.addEventListener('click',e=>{e.preventDefault();clientAuthIntent=false;renderLogin('login');});
+}
+
+async function publishPublicCatalogue(){
+  if(!currentUser || !estProprietaire()) return;
+  const items=state.produits.filter(p=>p.actif!==false).map(p=>({id:p.id,nom:p.nom||'',type:p.type||'Bien',categorie:p.categorie||'',prix:Number(p.prix||0),uniteStock:p.uniteStock||'Unité',uniteAchat:p.uniteAchat||'Unité',description:p.description||''}));
+  try{ await db.collection('catalogue_public').doc('klabcenter').set({ownerUid:dataOwnerUid,items,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}); }catch(e){ console.warn('Catalogue public non synchronisé',e); }
+}
+
+async function loadClientPortal(){
+  const cat=await db.collection('catalogue_public').doc('klabcenter').get();
+  if(!cat.exists || cat.data().ownerUid!==clientOwnerUid){ await auth.signOut(); renderClientLogin('login','Catalogue client indisponible.'); return; }
+  clientCatalogue=Array.isArray(cat.data().items)?cat.data().items:[];
+  const ds=await db.collection('demandes_clients').where('clientUid','==',currentUser.uid).get(); clientDemandes=ds.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+  const ms=await db.collection('messages_clients').where('conversationId','==',`${clientOwnerUid}_${currentUser.uid}`).get(); clientMessages=ms.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0));
+  state.loading=false; renderClientPortal();
+}
+
+function viewClientPortal(){
+  const active=clientCatalogue.filter(x=>x.type==='Service' || x.type==='Bien');
+  return `<div class="section-title">Espace client</div><div class="section-sub">Bienvenue ${esc(clientProfile?.nom||currentUser?.email||'Client')}. Demandez les biens ou services dont vous avez besoin.</div><div class="btn-row" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn ${clientTab==='catalogue'?'btn-primary':'btn-ghost'}" data-client-tab="catalogue">Catalogue</button><button class="btn ${clientTab==='demandes'?'btn-primary':'btn-ghost'}" data-client-tab="demandes">Mes demandes (${clientDemandes.length})</button><button class="btn ${clientTab==='messages'?'btn-primary':'btn-ghost'}" data-client-tab="messages">Messages</button></div>${clientTab==='catalogue'?`<div class="content-grid"><div class="card"><h3>🛒 Nouvelle demande</h3><form id="formClientDemande"><div class="field"><label>Article ou service *</label><select name="itemId" required><option value="">— Choisir —</option>${active.map(x=>`<option value="${esc(x.id)}">${esc(x.nom)} · ${x.type==='Service'?`${fmtGNF(x.prix*0.9)} après -10% en ligne`:`${fmtGNF(x.prix)}`} ${x.type==='Service'?'· Service':''}</option>`).join('')}</select></div><div class="field"><label>Quantité</label><input name="quantite" type="number" min="1" value="1" required></div><div class="helper" id="clientDiscountPreview">Choisissez un article ou un service pour voir le prix final.</div><div class="field"><label>Votre besoin ou précision</label><textarea name="message" placeholder="Décrivez votre besoin, délai ou détail…"></textarea></div><button class="btn btn-primary btn-block" type="submit">Envoyer la demande</button></form></div><div><div class="section-divider">Biens et activités disponibles</div><div class="list">${active.map(x=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(x.nom)}</div><div class="row-meta">${esc(x.categorie||x.type)} · ${fmtGNF(x.prix)} · ${x.type==='Service'?'Service sans stock':'Bien disponible'}</div></div></div>`).join('')}</div></div></div>`:clientTab==='demandes'?`<div class="card"><h3>📨 Mes demandes</h3>${clientDemandes.length?`<div class="list">${clientDemandes.map(d=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(d.itemName||'Demande')}</div><div class="row-meta">${d.quantite||1} · Total net ${fmtGNF(d.total||0)} · ${esc(d.status||'Envoyée')}</div><div class="helper">Prix catalogue : ${fmtGNF((d.prixCatalogue||d.prixUnitaire||0)*(d.quantite||1))}${Number(d.remisePourcent)>0?` · Remise en ligne ${d.remisePourcent}%`:''}</div><div class="helper">${esc(d.message||'')}</div></div></div>`).join('')}</div>`:'<div class="empty">Aucune demande envoyée.</div>'}</div>`:`<div class="card"><h3>💬 Messagerie KlabCenter</h3><div class="list" style="max-height:360px;overflow:auto;">${clientMessages.map(m=>`<div class="row-item"><div class="row-main"><div class="row-meta">${m.senderRole==='client'?'Vous':'KlabCenter'}</div><div>${esc(m.text)}</div></div></div>`).join('')||'<div class="empty">Commencez une conversation avec KlabCenter.</div>'}</div><form id="formClientMessage" class="btn-row"><input name="text" required placeholder="Écrire un message…"><button class="btn btn-primary" type="submit">Envoyer</button></form></div>`}`;
+}
+function renderClientPortal(){ document.getElementById('tabs').innerHTML=''; setHeaderDate(); document.getElementById('app').innerHTML=viewClientPortal(); attachClientPortalHandlers(); }
+function attachClientPortalHandlers(){
+  document.querySelectorAll('[data-client-tab]').forEach(b=>b.addEventListener('click',()=>{clientTab=b.dataset.clientTab;renderClientPortal();}));
+  const updateClientDiscountPreview=()=>{const form=document.getElementById('formClientDemande');const out=document.getElementById('clientDiscountPreview');if(!form||!out)return;const fd=new FormData(form);const item=clientCatalogue.find(x=>x.id===fd.get('itemId'));if(!item){out.textContent='Choisissez un article ou un service pour voir le prix final.';return;}const q=Math.max(1,Number(fd.get('quantite')||1));const normal=q*Number(item.prix||0);const remise=item.type==='Service'?normal*.10:0;const net=normal-remise;out.innerHTML=`Prix normal : <strong>${fmtGNF(normal)}</strong>${remise?` · Remise en ligne 10% : <strong>-${fmtGNF(remise)}</strong>`:''} · Total : <strong>${fmtGNF(net)}</strong>`;};
+  document.querySelector('#formClientDemande [name="itemId"]')?.addEventListener('change',updateClientDiscountPreview);
+  document.querySelector('#formClientDemande [name="quantite"]')?.addEventListener('input',updateClientDiscountPreview);
+  document.getElementById('formClientDemande')?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);const item=clientCatalogue.find(x=>x.id===fd.get('itemId'));if(!item)return;const q=Math.max(1,Number(fd.get('quantite')||1));const prixCatalogue=Number(item.prix||0);const remisePourcent=item.type==='Service'?10:0;const prixUnitaire=prixCatalogue*(1-remisePourcent/100);const total=q*prixUnitaire;await db.collection('demandes_clients').add({ownerUid:clientOwnerUid,clientUid:currentUser.uid,clientEmail:currentUser.email||'',itemId:item.id,itemName:item.nom,itemType:item.type,quantite:q,prixCatalogue,remisePourcent,prixUnitaire,total,message:String(fd.get('message')||'').trim(),status:'Envoyée',createdAt:firebase.firestore.FieldValue.serverTimestamp()});showToast('Demande envoyée à KlabCenter');await loadClientPortal();});
+  document.getElementById('formClientMessage')?.addEventListener('submit',async e=>{e.preventDefault();const text=String(new FormData(e.target).get('text')||'').trim();if(!text)return;await db.collection('messages_clients').add({ownerUid:clientOwnerUid,clientUid:currentUser.uid,conversationId:`${clientOwnerUid}_${currentUser.uid}`,senderUid:currentUser.uid,senderRole:'client',text,createdAt:firebase.firestore.FieldValue.serverTimestamp()});await loadClientPortal();clientTab='messages';});
+}
+
 function renderLogin(mode, errorMsg){
   const hb = document.getElementById('btnHeaderLogout'); if(hb) hb.style.display='none';
   document.getElementById('tabs').innerHTML = '';
@@ -534,7 +594,8 @@ function renderLogin(mode, errorMsg){
         <div class="helper" style="text-align:center; margin-top:12px;">
           ${mode==='signup'
             ? `Vous avez déjà un compte ? <a href="#" id="toLogin" style="color:var(--blue-500); font-weight:600;">Se connecter</a>`
-            : `Première visite ? <a href="#" id="toSignup" style="color:var(--blue-500); font-weight:600;">Créer un compte</a>`}
+            : `Première visite ? <a href="#" id="toSignup" style="color:var(--blue-500); font-weight:600;">Créer un compte</a>`}<br>
+          <a href="#" id="openClientLogin" style="color:var(--blue-500); font-weight:600;">👤 Espace client</a>
         </div>
       </div>
     </div>
@@ -558,6 +619,7 @@ function renderLogin(mode, errorMsg){
   document.getElementById('forgotPassword')?.addEventListener('click', async e=>{ e.preventDefault(); const email=await customPrompt('Entrez votre adresse email KlabCenter :', {title:'Mot de passe oublié', type:'email', placeholder:'vous@exemple.com', okText:'Envoyer'}); if(!email) return; try{ await auth.sendPasswordResetEmail(email.trim()); showToast('📧 Email de réinitialisation envoyé'); }catch(err){ renderLogin('login', traduireErreurAuth(err)); } });
   document.getElementById('toSignup')?.addEventListener('click', e=>{ e.preventDefault(); renderLogin('signup'); });
   document.getElementById('toLogin')?.addEventListener('click', e=>{ e.preventDefault(); renderLogin('login'); });
+  document.getElementById('openClientLogin')?.addEventListener('click', e=>{ e.preventDefault(); renderClientLogin('login'); });
 }
 function traduireErreurAuth(err){
   const map = {
@@ -579,6 +641,14 @@ async function logout(){
 auth.onAuthStateChanged(async user=>{
   if(user){
     currentUser = user;
+    let cp = await db.collection('clients_portal').doc(user.uid).get().catch(()=>null);
+    if(!cp?.exists && clientAuthIntent){ for(let i=0;i<4 && !cp?.exists;i++){ await new Promise(r=>setTimeout(r,250)); cp=await db.collection('clients_portal').doc(user.uid).get().catch(()=>null); } }
+    if(cp && cp.exists && cp.data().role==='client'){
+      clientMode=true; clientProfile=cp.data(); clientOwnerUid=cp.data().ownerUid; clientAuthIntent=false;
+      await loadClientPortal();
+      return;
+    }
+    clientMode=false; clientProfile=null; clientOwnerUid=null;
     state.loading = true;
     const acces = await resolveAccessContext();
     if(!acces){
@@ -589,6 +659,7 @@ auth.onAuthStateChanged(async user=>{
     loadAll();
   }else{
     if(unsubscribeSync){ unsubscribeSync(); unsubscribeSync=null; }
+    clientMode=false; clientProfile=null; clientOwnerUid=null; clientCatalogue=[]; clientDemandes=[]; clientMessages=[];
     currentUser = null;
     dataOwnerUid = null;
     state.role = 'proprietaire';
@@ -767,6 +838,7 @@ const TABS_ALL = [
   {id:'factures',   label:'🧾 Factures',   roles:['proprietaire','secretaire']},
   {id:'fournisseurs',label:'🏭 Fournisseurs',roles:['proprietaire','secretaire']},
   {id:'commandes',  label:'📋 Commandes',  roles:['proprietaire','secretaire','tresorier']},
+  {id:'demandesClients', label:'📨 Demandes clients', roles:['proprietaire','secretaire']},
   {id:'tresorerie', label:'💰 Trésorerie', roles:['proprietaire','tresorier']},
   {id:'employes',   label:'🧑‍💼 Employés', roles:['proprietaire']},
   {id:'parametres', label:'⚙️ Paramètres', roles:['proprietaire']},
@@ -796,6 +868,22 @@ function setHeaderDate(){
   el.innerHTML = d.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short'}) + '<br>' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 }
 
+let demandesClientsAdmin=[]; let messagesClientsAdmin=[];
+async function loadDemandesClientsAdmin(){
+  if(!dataOwnerUid) return;
+  const [ds,ms]=await Promise.all([db.collection('demandes_clients').where('ownerUid','==',dataOwnerUid).get(),db.collection('messages_clients').where('ownerUid','==',dataOwnerUid).get()]);
+  demandesClientsAdmin=ds.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+  messagesClientsAdmin=ms.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0));
+}
+function viewDemandesClients(){
+  const conv={}; messagesClientsAdmin.forEach(m=>{(conv[m.conversationId]||(conv[m.conversationId]=[])).push(m);});
+  return `<div class="section-title">Demandes & messages clients</div><div class="section-sub">Répondez aux besoins reçus sans modifier le stock avant votre validation.</div><div class="content-grid"><div class="card"><h3>📨 Demandes reçues</h3>${demandesClientsAdmin.length?`<div class="list">${demandesClientsAdmin.map(d=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(d.itemName||'Demande')} · ${esc(d.clientEmail||'Client')}</div><div class="row-meta">${d.quantite||1} · Total net ${fmtGNF(d.total||0)} · ${esc(d.status||'Envoyée')}</div><div class="helper">Prix catalogue : ${fmtGNF((d.prixCatalogue||d.prixUnitaire||0)*(d.quantite||1))}${Number(d.remisePourcent)>0?` · Remise en ligne ${d.remisePourcent}%`:''}</div><div class="helper">${esc(d.message||'')}</div></div><select data-client-demand-status="${d.id}" style="width:auto;"><option ${d.status==='Envoyée'?'selected':''}>Envoyée</option><option ${d.status==='En discussion'?'selected':''}>En discussion</option><option ${d.status==='Acceptée'?'selected':''}>Acceptée</option><option ${d.status==='Refusée'?'selected':''}>Refusée</option><option ${d.status==='Terminée'?'selected':''}>Terminée</option></select></div>`).join('')}</div>`:'<div class="empty">Aucune demande client.</div>'}</div><div class="card"><h3>💬 Messages</h3>${Object.keys(conv).length?Object.entries(conv).map(([id,msgs])=>{const last=msgs[msgs.length-1];return `<div class="row-item" style="display:block;margin-bottom:8px;"><div class="row-title">${esc(last.clientEmail||'Client')}</div><div class="helper">${esc(last.text||'')}</div><form class="client-reply-form" data-conversation="${id}" data-client-uid="${last.clientUid}"><input name="text" required placeholder="Répondre au client…"><button class="btn btn-primary btn-block" type="submit">Répondre</button></form></div>`;}).join(''):`<div class="empty">Aucun message client.</div>`}</div></div>`;
+}
+async function attachDemandesClientsHandlers(){
+  document.querySelectorAll('[data-client-demand-status]').forEach(s=>s.addEventListener('change',async()=>{await db.collection('demandes_clients').doc(s.dataset.clientDemandStatus).update({status:s.value,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});showToast('Statut mis à jour');}));
+  document.querySelectorAll('.client-reply-form').forEach(f=>f.addEventListener('submit',async e=>{e.preventDefault();const text=String(new FormData(f).get('text')||'').trim();if(!text)return;await db.collection('messages_clients').add({ownerUid:dataOwnerUid,clientUid:f.dataset.clientUid,conversationId:f.dataset.conversation,senderUid:currentUser.uid,senderRole:'admin',text,createdAt:firebase.firestore.FieldValue.serverTimestamp()});f.reset();showToast('Réponse envoyée');}));
+}
+
 function render(){
   const allowed = getTabs();
   if(!allowed.find(t=>t.id===state.activeTab)) state.activeTab = allowed[0]?.id || 'accueil';
@@ -804,6 +892,7 @@ function render(){
   const app = document.getElementById('app');
   if(state.loading){ app.innerHTML = `<div class="empty">Chargement de vos données…</div>`; return; }
   switch(state.activeTab){
+    case 'demandesClients': app.innerHTML='<div class="empty">Chargement des demandes clients…</div>'; loadDemandesClientsAdmin().then(()=>{if(state.activeTab==='demandesClients'){app.innerHTML=viewDemandesClients();attachDemandesClientsHandlers();}}); return;
     case 'accueil': app.innerHTML = viewAccueil(); attachAccueilHandlers(); return;
     case 'clients': app.innerHTML = viewClients(); attachClientsHandlers(); return;
     case 'produits': app.innerHTML = viewProduits(); attachProduitsHandlers(); return;

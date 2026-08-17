@@ -3,72 +3,71 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function ownUser(userId) { return signedIn() && request.auth.uid == userId; }
-
-    // Lien d'un compte employé vers l'entreprise (propriétaire), son rôle, et son état (suspendu ou non).
-    function lienDe(uid) {
-      return get(/databases/$(database)/documents/liens_employes/$(uid));
-    }
+    function lienDe(uid) { return get(/databases/$(database)/documents/liens_employes/$(uid)); }
     function estEmployeDe(ownerUid) {
-      return signedIn()
-        && exists(/databases/$(database)/documents/liens_employes/$(request.auth.uid))
+      return signedIn() && exists(/databases/$(database)/documents/liens_employes/$(request.auth.uid))
         && lienDe(request.auth.uid).data.ownerUid == ownerUid;
     }
-    function roleEmploye() {
-      return lienDe(request.auth.uid).data.role;
-    }
-    function estSuspendu() {
-      return lienDe(request.auth.uid).data.get('suspendu', false) == true;
-    }
-    // Un employé actif (non suspendu) n'a accès qu'aux types de données autorisés pour son rôle :
-    // - Secrétariat : toutes les saisies (clients, produits, ventes, dépenses, factures)
-    // - Trésorier   : uniquement la trésorerie
-    // kc_parametres reste lisible/écrivable par tous les membres actifs (nom entreprise, devise, etc.)
+    function roleEmploye() { return lienDe(request.auth.uid).data.role; }
+    function estSuspendu() { return lienDe(request.auth.uid).data.get('suspendu', false) == true; }
     function accesEmploye(ownerUid, dataId) {
       return estEmployeDe(ownerUid) && !estSuspendu() && (
         dataId == 'kc_parametres' ||
         (roleEmploye() == 'secretaire' && dataId in ['kc_clients','kc_produits','kc_ventes','kc_depenses','kc_factures','kc_fournisseurs','kc_commandes','kc_mouvements_stock']) ||
-        (roleEmploye() == 'tresorier'  && dataId in ['kc_tresorerie','kc_commandes','kc_mouvements_stock'])
+        (roleEmploye() == 'tresorier' && dataId in ['kc_tresorerie','kc_commandes','kc_mouvements_stock'])
       );
+    }
+    function catalogueOwner() {
+      return get(/databases/$(database)/documents/catalogue_public/klabcenter).data.ownerUid;
+    }
+    function isClient(uid) {
+      return exists(/databases/$(database)/documents/clients_portal/$(uid))
+        && get(/databases/$(database)/documents/clients_portal/$(uid)).data.role == 'client';
     }
 
     match /liens_employes/{employeUid} {
-      // L'employé lit son propre lien (y compris pour vérifier s'il est suspendu) ;
-      // le propriétaire lit/gère les liens de ses employés.
-      allow read: if signedIn() && (
-        request.auth.uid == employeUid ||
-        (resource != null && resource.data.ownerUid == request.auth.uid)
-      );
+      allow read: if signedIn() && (request.auth.uid == employeUid || (resource != null && resource.data.ownerUid == request.auth.uid));
       allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
-      // Seul le propriétaire peut modifier (ex. suspendre/réactiver) ou retirer un accès employé.
       allow update, delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
     }
 
     match /users/{userId} {
       allow read, create, update, delete: if ownUser(userId);
-
       match /data/{dataId} {
-        // Propriétaire : accès complet, y compris suppression.
-        allow read, create, update, delete: if ownUser(userId)
-          && dataId in ['kc_clients','kc_produits','kc_ventes','kc_depenses','kc_factures','kc_fournisseurs','kc_commandes','kc_mouvements_stock','kc_parametres','kc_tresorerie'];
-
-        // Employé actif : lecture/écriture selon son rôle, JAMAIS de suppression du document Firestore.
-        // Note : chaque type de donnée est stocké comme un unique document JSON (catalogue entier, etc.),
-        // donc cette règle empêche la suppression du document lui-même ; le contrôle fin (ne pas retirer
-        // une ligne précise du JSON) est assuré côté application — voir le README pour le détail.
+        allow read, create, update, delete: if ownUser(userId) && dataId in ['kc_clients','kc_produits','kc_ventes','kc_depenses','kc_factures','kc_fournisseurs','kc_commandes','kc_mouvements_stock','kc_parametres','kc_tresorerie'];
         allow read, create, update: if accesEmploye(userId, dataId);
       }
     }
 
-    // Journal d'audit : trace les actions (créations/modifications) des employés.
-    // Écriture en ajout seul par l'employé concerné, aucune modification ni suppression possible
-    // par quiconque via le client — traçabilité garantie.
     match /journal_employes/{entryId} {
-      allow create: if signedIn()
-        && estEmployeDe(request.resource.data.ownerUid)
-        && !estSuspendu()
-        && request.resource.data.employeUid == request.auth.uid
-        && request.resource.data.role == roleEmploye();
+      allow create: if signedIn() && estEmployeDe(request.resource.data.ownerUid) && !estSuspendu() && request.resource.data.employeUid == request.auth.uid && request.resource.data.role == roleEmploye();
       allow read: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /catalogue_public/{catalogueId} {
+      allow read: if true;
+      allow create, update: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /clients_portal/{clientUid} {
+      allow create: if ownUser(clientUid) && request.resource.data.role == 'client' && request.resource.data.ownerUid == catalogueOwner();
+      allow read, update: if ownUser(clientUid) || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow delete: if false;
+    }
+
+    match /demandes_clients/{demandeId} {
+      allow create: if signedIn() && isClient(request.auth.uid) && request.resource.data.clientUid == request.auth.uid && request.resource.data.ownerUid == catalogueOwner();
+      allow read: if signedIn() && (resource.data.clientUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
+      allow update: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /messages_clients/{messageId} {
+      allow create: if (signedIn() && isClient(request.auth.uid) && request.resource.data.clientUid == request.auth.uid && request.resource.data.ownerUid == catalogueOwner())
+        || (signedIn() && request.resource.data.ownerUid == request.auth.uid);
+      allow read: if signedIn() && (resource.data.clientUid == request.auth.uid || resource.data.ownerUid == request.auth.uid);
       allow update, delete: if false;
     }
   }
