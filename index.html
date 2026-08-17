@@ -1854,8 +1854,10 @@ function attachCommandesHandlers(){
   document.getElementById('btnCommandeRetour')?.addEventListener('click',()=>{ if(commandeWizardStep>0) showCommandeWizard(commandeWizardLine,commandeWizardStep-1); else if(commandeWizardLine>0){ commandeWizardLine--; const prev=commandeWizardFields(commandeWizardLine); showCommandeWizard(commandeWizardLine,prev.length-1); } });
   document.getElementById('cancelEditCommande')?.addEventListener('click',()=>{state.editing.commandes=null;commandeLignesTmp=[{produitId:'',quantite:1,prixUnitaire:0}];commandeFormTmp={fournisseurId:'',date:todayISO(),observations:''};render();});
   setTimeout(()=>{ if(commandeFormTmp.fournisseurId) showCommandeWizard(commandeWizardLine,commandeWizardStep); else fournisseurCommande?.focus(); },60);
-  document.getElementById('formCommande')?.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); e.currentTarget.requestSubmit(); } });
-  document.getElementById('formCommande')?.addEventListener('submit',async e=>{
+  const formCommande=document.getElementById('formCommande');
+  if(formCommande) formCommande.noValidate=true;
+  formCommande?.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); e.currentTarget.requestSubmit(); } });
+  formCommande?.addEventListener('submit',async e=>{
     e.preventDefault(); const fd=new FormData(e.target); commandeFormTmp.date=fd.get('date')||todayISO(); commandeFormTmp.fournisseurId=fd.get('fournisseurId')||''; commandeFormTmp.observations=(fd.get('observations')||'').trim();
     commandeLignesTmp.forEach((l,i)=>{const row=document.querySelector('.commande-ligne[data-i="'+i+'"]');const nom=row?.querySelector('.commande-nouveau-nom');const cat=row?.querySelector('.commande-nouveau-categorie');const unite=row?.querySelector('.commande-nouveau-unite');const facteur=row?.querySelector('.commande-nouveau-facteur');if(nom)l.nomManuel=String(nom.value||'').trim();const stock=row?.querySelector('.commande-nouveau-stock');if(cat)l.categorieManuelle=cat.value||'Autres';if(stock)l.uniteStock=stock.value||'Unité';if(unite)l.uniteAchat=unite.value||'Unité';if(facteur){ const n=Number(facteur.value); l.facteurAchat=n>0?n:null; }});
     const editId=state.editing.commandes; const old=editId?state.commandes.find(c=>c.id===editId):null; let catalogueAjoute=false; const lignes=[]; const produitsDejaVus=new Set(); const nomsManuelsDejaVus=new Set();

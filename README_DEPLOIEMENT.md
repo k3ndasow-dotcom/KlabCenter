@@ -190,3 +190,8 @@ Le stock déjà enregistré avant la découverte du contenu n’est pas converti
 Le fichier `logo-klabcenter.png` doit rester dans le même dossier que `index.html`. Il est utilisé dans l’en-tête des bons de commande, dans l’aperçu des factures imprimées et dans les factures PDF téléchargées. Les coordonnées enregistrées dans Paramètres apparaissent à côté du logo.
 
 Lors d’une publication GitHub Pages, téléversez donc également `logo-klabcenter.png`. Le service worker le met en cache pour permettre l’affichage du logo même après l’installation de la PWA.
+
+
+## 22. Correction de validation des commandes multi-articles
+
+Après l’ajout automatique d’une ligne suivante, la ligne vide de préparation ne doit pas empêcher l’enregistrement des lignes déjà complétées. La validation métier ignore désormais cette ligne vide et vérifie uniquement les articles réellement sélectionnés. Une commande contenant plusieurs biens peut donc être enregistrée après la saisie du dernier prix, sans devoir remplir ou supprimer une ligne supplémentaire.
