@@ -174,3 +174,19 @@ Le propriétaire peut maintenant ouvrir **Paramètres → Démarrer avec les don
 Les paramètres de l’entreprise, les formules de calcul, la structure Firebase, les comptes employés et les règles de sécurité ne sont pas supprimés. Cette opération doit être utilisée uniquement lorsque toutes les données présentes sont des essais. La sauvegarde téléchargée permet de revenir en arrière avec **Restaurer une sauvegarde**.
 
 Les catégories sont maintenant séparées. Les biens proposent notamment `Papeterie`, `Librairie`, `Fournitures bureau`, `Fournitures scolaires`, `Électroniques` et `Consommables imprimantes`. Les services proposent notamment `Documents & CV`, `Photographie`, `Maintenance`, `Formation`, `Installation`, `Assistance informatique` et `Impression`. Ainsi, `Maintenance` n’est plus proposée lors de la création d’un bien et un service ne demande jamais de stock.
+
+
+## 20. Produits vendus à l’unité et achetés par paquet
+
+Pour un article comme `Enveloppes A4`, choisissez `Enveloppe` comme **unité suivie en stock** et `Paquet` comme **unité d’achat**. Le prix de vente est le prix d’une enveloppe ; le prix d’achat dans une commande est le prix d’un paquet. Si le nombre d’enveloppes dans le paquet est inconnu, laissez le contenu vide : l’article peut tout de même être enregistré et commandé.
+
+À la réception, KlabCenter demande d’abord le nombre de paquets réellement reçus, puis, si nécessaire, le nombre d’enveloppes contenues dans un paquet après comptage réel. Exemple : 4 paquets à 30 000 GNF, avec 100 enveloppes par paquet, ajoutent 400 enveloppes au stock et enregistrent 120 000 GNF de dépense. Le contenu `100` est alors mémorisé dans la fiche Enveloppes A4 et sera réutilisé automatiquement dans les prochaines commandes et réceptions.
+
+Le stock déjà enregistré avant la découverte du contenu n’est pas converti silencieusement. Toute conversion d’un ancien stock doit faire l’objet d’un ajustement explicite afin de préserver l’historique.
+
+
+## 21. Logo sur commandes et factures
+
+Le fichier `logo-klabcenter.png` doit rester dans le même dossier que `index.html`. Il est utilisé dans l’en-tête des bons de commande, dans l’aperçu des factures imprimées et dans les factures PDF téléchargées. Les coordonnées enregistrées dans Paramètres apparaissent à côté du logo.
+
+Lors d’une publication GitHub Pages, téléversez donc également `logo-klabcenter.png`. Le service worker le met en cache pour permettre l’affichage du logo même après l’installation de la PWA.

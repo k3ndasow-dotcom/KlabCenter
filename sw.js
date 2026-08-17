@@ -1,5 +1,5 @@
-const CACHE_NAME = 'klabcenter-v16';
-const CORE_ASSETS = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+const CACHE_NAME = 'klabcenter-v18';
+const CORE_ASSETS = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png', './logo-klabcenter.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(
