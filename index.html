@@ -677,7 +677,7 @@ function sortiesFor(produitId){
 function uniteStock(p){ return p?.uniteStock || 'Unité'; }
 function uniteAchat(p){ return p?.uniteAchat || 'Unité'; }
 function facteurAchat(p){ return Math.max(1, Number(p?.facteurAchat)||1); }
-function conditionnementConnu(p){ return p?.type==='Bien' && Number(p?.facteurAchat)>0 && p?.conditionnementConfirme!==false; }
+function conditionnementConnu(p){ return p?.type==='Bien' && ((uniteAchat(p)===uniteStock(p)) || (Number(p?.facteurAchat)>0 && p?.conditionnementConfirme!==false)); }
 function libelleAchat(p){ const achat=uniteAchat(p); return conditionnementConnu(p) ? `1 ${achat} = ${facteurAchat(p)} ${uniteStock(p)}` : `1 ${achat} = contenu à confirmer`; }
 function libelleConditionnement(p){ const achat=uniteAchat(p); const stock=uniteStock(p); const facteur=facteurAchat(p); return facteur>1 ? `${achat} · 1 ${achat} = ${facteur} ${stock}${facteur>1?'s':''}` : achat; }
 function libelleStock(p,quantite){ const q=Number(quantite); const u=uniteStock(p); return `${q} ${u}${q===1?'':'s'}`; }
@@ -1861,7 +1861,7 @@ function attachCommandesHandlers(){
     e.preventDefault(); const fd=new FormData(e.target); commandeFormTmp.date=fd.get('date')||todayISO(); commandeFormTmp.fournisseurId=fd.get('fournisseurId')||''; commandeFormTmp.observations=(fd.get('observations')||'').trim();
     commandeLignesTmp.forEach((l,i)=>{const row=document.querySelector('.commande-ligne[data-i="'+i+'"]');const nom=row?.querySelector('.commande-nouveau-nom');const cat=row?.querySelector('.commande-nouveau-categorie');const unite=row?.querySelector('.commande-nouveau-unite');const facteur=row?.querySelector('.commande-nouveau-facteur');if(nom)l.nomManuel=String(nom.value||'').trim();const stock=row?.querySelector('.commande-nouveau-stock');if(cat)l.categorieManuelle=cat.value||'Autres';if(stock)l.uniteStock=stock.value||'Unité';if(unite)l.uniteAchat=unite.value||'Unité';if(facteur){ const n=Number(facteur.value); l.facteurAchat=n>0?n:null; }});
     const editId=state.editing.commandes; const old=editId?state.commandes.find(c=>c.id===editId):null; let catalogueAjoute=false; const lignes=[]; const produitsDejaVus=new Set(); const nomsManuelsDejaVus=new Set();
-    for(const l of commandeLignesTmp.filter(x=>x.produitId)){
+    for(const l of commandeLignesTmp.filter(x=>x.produitId && !(x.produitId==='__nouveau__' && !String(x.nomManuel||'').trim()))){
       let produitId=l.produitId; let p=produitById(produitId);
       if(produitId==='__nouveau__'){
         const nom=String(l.nomManuel||'').trim(); if(!nom){showToast('Saisissez le nom du nouveau bien');return;} const cleNom=nom.toLowerCase(); if(nomsManuelsDejaVus.has(cleNom)){showToast('Ce nouveau bien est déjà présent dans cette commande');return;} nomsManuelsDejaVus.add(cleNom);
