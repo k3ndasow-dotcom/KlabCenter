@@ -44,7 +44,7 @@
     --shadow: 0 1px 2px rgba(16,32,64,.04), 0 6px 20px rgba(16,32,64,.06);
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
+  html,body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;}
   body{
     background:var(--bg);
     color:var(--text-900);
@@ -57,24 +57,24 @@
 
   /* ---------- Header ---------- */
   header.app-header{
-    position:sticky; top:0; z-index:40;
+    position:sticky; top:0; z-index:40; width:100%; max-width:100vw;
     background:linear-gradient(120deg,var(--navy-900) 0%, var(--navy-700) 60%, var(--blue-500) 130%);
     color:#fff;
     padding:14px 16px 12px;
     box-shadow: var(--shadow);
   }
-  .header-row{display:flex; align-items:center; gap:12px;}
+  .header-row{display:flex; align-items:center; gap:12px; width:100%; min-width:0; overflow:hidden;}
   .kc-mark{
     width:40px; height:40px; border-radius:11px; flex:0 0 auto;
     display:block;
     box-shadow: 0 3px 10px rgba(0,0,0,.25);
   }
-  .brand-block{line-height:1.05;}
+  .brand-block{line-height:1.05;min-width:0;overflow:hidden;}
   .brand-word{font-size:17px; font-weight:700;}
   .brand-word b{color:#9DBBF6;}
   .brand-sub{font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:#B7C7EE; margin-top:2px;}
-  .header-date{margin-left:auto; font-size:11px; color:#C9D6F5; text-align:right;}
-  .header-sync{font-size:10px; color:#DCE6FA; max-width:150px; text-align:right; line-height:1.25;}
+  .header-date{margin-left:auto; font-size:11px; color:#C9D6F5; text-align:right; min-width:0; flex:0 1 auto;}
+  .header-sync{font-size:10px; color:#DCE6FA; max-width:150px; min-width:0; flex:0 1 auto; text-align:right; line-height:1.25;}
   .quick-actions .btn-row{margin-top:4px; flex-wrap:wrap;}
 
   nav.tabs{
@@ -96,7 +96,8 @@
   .tab-count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:999px;background:var(--danger);color:#fff;font-size:10px;font-weight:800;vertical-align:middle;}
   .tab-count.zero{background:rgba(255,255,255,.2);}.tab-btn.active .tab-count.zero{background:var(--blue-100);color:var(--blue-500);}
 
-  main{padding:16px; max-width:720px; margin:0 auto;}
+  #app{width:100%;max-width:100vw;min-width:0;overflow-x:hidden;}
+  main{padding:16px; max-width:720px; width:100%; min-width:0; margin:0 auto; overflow-x:hidden;}
   .section-title{font-size:19px; font-weight:700; margin:4px 0 14px;}
   .section-sub{font-size:12.5px; color:var(--text-500); margin-top:-10px; margin-bottom:16px;}
 
@@ -127,9 +128,36 @@
     main{max-width:1320px;}
     .kpi-grid{grid-template-columns:repeat(6, 1fr);}
   }
+  @media (max-width: 639px){
+    header.app-header{padding:11px 10px 10px;}
+    .header-row{gap:7px;}
+    .kc-mark{width:34px;height:34px;}
+    .brand-word{font-size:15px;}
+    .brand-sub{font-size:8.5px;letter-spacing:.1em;}
+    .header-date{font-size:9px;line-height:1.15;}
+    .header-sync{font-size:9px;max-width:82px;}
+    #btnHeaderLogout{width:27px !important;height:27px !important;font-size:12px !important;}
+    main{padding:12px 10px;}
+    .section-title{font-size:18px;overflow-wrap:anywhere;}
+    .section-sub{overflow-wrap:anywhere;}
+    .dashboard-columns{grid-template-columns:1fr;}
+    .dashboard-hero{padding:15px;}
+    .dashboard-hero h2{font-size:16px;}
+    .kpi-grid{grid-template-columns:1fr 1fr;gap:8px;}
+    .kpi-card{padding:10px;}
+    .metric-card{gap:7px;min-height:70px;}
+    .metric-icon{width:31px;height:31px;font-size:14px;}
+    .metric-copy .kpi-label{font-size:8.5px;letter-spacing:.04em;}
+    .metric-copy .kpi-value{font-size:17px;}
+    .row-item{align-items:flex-start;}
+    .row-main{min-width:0;overflow-wrap:anywhere;}
+    .row-title,.row-meta{white-space:normal;overflow-wrap:anywhere;}
+    .row-item select{max-width:42%;min-width:110px;}
+  }
   @media (max-width: 380px){
     .form-grid{grid-template-columns:1fr;}
     .kpi-grid{grid-template-columns:1fr 1fr;}
+    .header-date{display:none;}
   }
   .kpi-card{
     background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
@@ -141,7 +169,7 @@
   .kpi-value.bad{color:var(--danger);}
   .kpi-value.warn{color:var(--warn);}
 
-  .card{
+  .card{min-width:0;overflow:hidden;
     background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
     box-shadow:var(--shadow); padding:16px; margin-bottom:16px;
   }
@@ -174,7 +202,7 @@
 
   /* ---------- List rows ---------- */
   .list{display:flex; flex-direction:column; gap:8px;}
-  .row-item{
+  .row-item{min-width:0;
     background:var(--surface); border:1px solid var(--border); border-radius:12px;
     padding:11px 13px; display:flex; align-items:center; gap:10px;
   }
@@ -283,7 +311,7 @@
   .inbox-row .inbox-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:4px;}
   .message-badge{font-size:10px;font-weight:700;border-radius:999px;padding:3px 8px;white-space:nowrap;}.message-badge.received{color:var(--blue-500);background:var(--blue-100);}.message-badge.sent{color:var(--ok);background:var(--ok-bg);}.message-badge.unread{color:var(--danger);background:var(--danger-bg);}
   .status-badge{font-size:10px;font-weight:700;border-radius:999px;padding:4px 8px;background:var(--warn-bg);color:var(--warn);white-space:nowrap;}
-  .dashboard-columns{display:grid;grid-template-columns:1fr;gap:16px;}.dashboard-list{max-height:290px;overflow:auto;}
+  .dashboard-columns{display:grid;grid-template-columns:1fr;gap:16px;min-width:0;}.dashboard-list{max-height:290px;overflow:auto;min-width:0;}
   @media (min-width:900px){.dashboard-columns{grid-template-columns:1fr 1fr;}}
   ::selection{background:var(--blue-300);}
   @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
@@ -958,10 +986,7 @@ function viewAccueil(){
       <div class="kpi-card metric-card"><div class="metric-icon">📨</div><div class="metric-copy"><div class="kpi-label">Demandes ouvertes</div><div class="kpi-value num ${demandesOuvertes.length?'warn':'good'}">${demandesOuvertes.length}</div></div></div>
       <div class="kpi-card metric-card"><div class="metric-icon danger">💬</div><div class="metric-copy"><div class="kpi-label">Messages non lus</div><div class="kpi-value num ${messagesNonLus.length?'bad':'good'}">${messagesNonLus.length}</div></div></div>
     </div>
-    <div class="dashboard-columns">
-      <div class="card"><h3>📨 Demandes clients <span class="status-badge">${demandesOuvertes.length} en attente</span></h3>${demandesOuvertes.length?`<div class="dashboard-list">${demandesOuvertes.slice(0,5).map(d=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(d.itemName||'Demande')} · ${esc(d.clientEmail||'Client')}</div><div class="row-meta">${d.quantite||1} · ${fmtGNF(d.total||0)} · ${esc(d.status||'Envoyée')}</div></div><span class="pill pill-warn">À traiter</span></div>`).join('')}</div>`:'<div class="empty">Aucune demande en attente.</div>'}<div class="btn-row"><button class="btn btn-primary" data-quick-tab="demandesClients">Voir toutes les demandes</button></div></div>
-      <div class="card"><h3>💬 Centre de messages <span class="status-badge">${messagesNonLus.length} non lu(s)</span></h3>${derniersMessages.length?`<div class="dashboard-list">${derniersMessages.map(m=>`<div class="inbox-row ${m.senderRole==='client'?'received':'sent'} ${m.senderRole==='client'&&m.luAdmin!==true?'unread':''}"><div class="inbox-head"><strong>${m.senderRole==='client'?'Message reçu':'Réponse envoyée'}</strong><span class="message-badge ${m.senderRole==='client'?'received':'sent'}">${m.senderRole==='client'?(m.luAdmin===true?'Lu':'Non lu'):'Envoyé'}</span></div><div class="row-meta">${esc(m.clientEmail||'Client')}</div><div>${esc(m.text||'')}</div></div>`).join('')}</div>`:'<div class="empty">Aucun message.</div>'}<div class="btn-row"><button class="btn btn-primary" data-quick-tab="demandesClients">Ouvrir la messagerie</button></div></div>
-    </div>
+    <div class="card"><h3>📨 Demandes clients <span class="status-badge">${demandesOuvertes.length} en attente</span></h3>${demandesOuvertes.length?`<div class="dashboard-list">${demandesOuvertes.slice(0,5).map(d=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(d.itemName||'Demande')} · ${esc(d.clientEmail||'Client')}</div><div class="row-meta">${d.quantite||1} · ${fmtGNF(d.total||0)} · ${esc(d.status||'Envoyée')}</div></div><span class="pill pill-warn">À traiter</span></div>`).join('')}</div>`:'<div class="empty">Aucune demande en attente.</div>'}<div class="btn-row"><button class="btn btn-primary" data-quick-tab="demandesClients">Voir toutes les demandes</button></div></div>
     <div class="card"><h3>📈 Évolution (6 derniers mois)</h3><canvas id="chartCA" height="190"></canvas></div>
     ${alertes.length>0 ? `<div class="card"><h3>⚠️ Articles à réapprovisionner</h3><div class="list">${alertes.map(p=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(p.nom)}</div><div class="row-meta">Stock actuel : ${stockActuel(p)}</div></div><span class="pill ${statutStock(p)==='RUPTURE'?'pill-danger':'pill-warn'}">${statutStock(p)}</span></div>`).join('')}</div></div>` : ''}
     <div class="card"><h3>🕐 Dernières ventes</h3>${dernieresVentes.length===0 ? `<div class="empty">Aucune vente enregistrée pour l'instant.</div>` : `<div class="list">${dernieresVentes.map(v=>{const p=produitById(v.produitId);const c=clientById(v.clientId);return `<div class="row-item"><div class="row-main"><div class="row-title">${esc(p?p.nom:'—')}</div><div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)}</div></div><div class="row-amount">${fmtGNF(ventesTotal(v))}</div></div>`;}).join('')}</div>`}</div>

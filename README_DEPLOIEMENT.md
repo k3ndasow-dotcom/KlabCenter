@@ -244,3 +244,12 @@ L’archive v26 inclut une version fusionnée de `firestore.rules`. Elle reprend
 Les demandes et messages restent liés au propriétaire du catalogue. Un client ne peut consulter que son compte, ses demandes et sa conversation. Le propriétaire peut traiter les demandes et marquer les messages reçus comme lus. Les autres clients ne peuvent jamais accéder à ces données.
 
 Le stockage principal de KlabCenter reste situé sous `users/{userId}/data`. Les catégories `kc_services`, `kc_recettes` et `kc_utilisateurs` ont été ajoutées aux listes compatibles sans modifier les anciennes données. Le service worker est passé en v26.
+
+
+## 27. Interface mobile corrigée — version v27
+
+Les messages détaillés ne sont plus affichés sur le tableau de bord principal. L’accueil conserve uniquement les compteurs de demandes ouvertes et de messages non lus ainsi qu’un raccourci vers la rubrique dédiée « Demandes clients ».
+
+La rubrique « Demandes clients » conserve la boîte de réception et la distinction entre messages reçus, réponses envoyées, messages lus et messages non lus.
+
+La mise en page mobile utilise désormais toute la largeur disponible, empêche le débordement horizontal et adapte les cartes, les titres, les listes et les sélecteurs aux petits écrans. Le service worker est passé en v27.
