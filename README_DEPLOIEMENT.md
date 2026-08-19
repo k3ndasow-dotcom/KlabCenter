@@ -86,6 +86,12 @@ La version v28 met également à jour le service worker. Après publication, fer
 
 L’onglet **Rapports** permet maintenant de choisir une période **Jour, Semaine, Mois, Année** ou une période personnalisée avec une date de début et une date de fin. Le rapport est imprimable en A4. Il sépare le chiffre d’affaires des biens et des services, détaille les ventes, les quantités, les règlements et les restes dus, puis présente les encaissements par mode, les dépenses de la période et les entrées/sorties de stock. Le chiffre d’affaires est rattaché à la date de vente, tandis que les encaissements sont rattachés à la date réelle de chaque règlement. Les créances restent exclues de la trésorerie disponible.
 
+Le rapport peut être **clôturé par le propriétaire**. Une période clôturée est signalée dans l’interface et les nouvelles ventes ou dépenses dont la date appartient à cette période sont refusées afin de préserver la cohérence du rapport.
+
+L’onglet **Créances** regroupe les ventes et prestations non réglées ou partiellement réglées, avec le total restant à recouvrer, le client, l’opération et un accès direct à l’enregistrement du règlement dans Trésorerie.
+
+Dans **Demandes clients**, le propriétaire ou le secrétariat peut convertir une demande acceptée en vente ou en prestation. Les biens sont contrôlés par rapport au stock disponible et créent leur mouvement de sortie ; les services sont créés sans mouvement de stock. La demande conserve son identifiant d’origine pour la traçabilité.
+
 ## 11. Version finale 2026.08
 
 La version finale affiche l’état de synchronisation dans l’en-tête. « En ligne · Synchronisé » signifie que la dernière écriture a été confirmée par Firebase. « Synchronisation… » indique qu’une écriture est en cours. « Échec de synchronisation » signifie que la donnée a pu rester localement sur l’appareil et qu’il faut reconnecter l’appareil avant de fermer la page.
