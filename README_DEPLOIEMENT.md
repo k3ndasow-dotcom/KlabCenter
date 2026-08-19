@@ -76,7 +76,17 @@ modifier le JSON directement. Si vous avez besoin d'une garantie absolue au nive
 important, à faire savoir si vous le souhaitez.
 
 
-## 10. Version finale 2026.08
+## 10. Version v28 — séparation des biens et des services
+
+L’onglet **Ventes** est désormais réservé aux **biens physiques** : seuls les produits de type `Bien` y sont proposés, la quantité est contrôlée par le stock disponible et chaque vente crée un mouvement de sortie de stock. L’onglet **Services** est séparé : il affiche uniquement les prestations de type `Service`, ne demande aucun stock et n’enregistre aucun mouvement de stock. Les deux onglets conservent les mêmes règles de paiement, de créance, de règlement et de protection après règlement.
+
+Les demandes du portail client continuent d’afficher les biens et les services dans un catalogue commun. La remise de 10 % reste appliquée uniquement aux services demandés en ligne ; elle ne s’applique pas aux biens. Les factures peuvent toujours regrouper des lignes de biens et de services lorsqu’une facture mixte est nécessaire.
+
+La version v28 met également à jour le service worker. Après publication, fermer puis rouvrir l’application installée, ou actualiser le site une fois en ligne, afin de charger le nouveau cache.
+
+L’onglet **Rapports** permet de sélectionner n’importe quelle date et de produire une synthèse journalière imprimable en A4. Le rapport sépare le chiffre d’affaires des biens et des services, détaille les ventes, les quantités, les règlements et les restes dus, puis présente les encaissements par mode, les dépenses du jour et les entrées/sorties de stock. Le chiffre d’affaires est rattaché à la date de vente, tandis que les encaissements sont rattachés à la date réelle de chaque règlement. Les créances restent exclues de la trésorerie disponible.
+
+## 11. Version finale 2026.08
 
 La version finale affiche l’état de synchronisation dans l’en-tête. « En ligne · Synchronisé » signifie que la dernière écriture a été confirmée par Firebase. « Synchronisation… » indique qu’une écriture est en cours. « Échec de synchronisation » signifie que la donnée a pu rester localement sur l’appareil et qu’il faut reconnecter l’appareil avant de fermer la page.
 
@@ -89,12 +99,12 @@ Pour publier une nouvelle version, remplacer `index.html`, `sw.js` et ce fichier
 **Règle d’exploitation :** ne jamais supprimer le projet Firebase, ne jamais recréer la base Firestore et ne jamais changer le `projectId` sans sauvegarde et validation préalable.
 
 
-## 11. Règle des commandes multi-lignes
+## 12. Règle des commandes multi-lignes
 
 Un même bien ne peut apparaître qu’une seule fois dans une même commande fournisseur. Si le bien est déjà sélectionné sur une autre ligne, l’application refuse la sélection. Le contrôle est également répété au moment de l’enregistrement pour éviter les doublons issus d’une saisie manuelle ou d’une ancienne version. Le bien reste disponible dans une commande future.
 
 
-## 12. Unités d’achat et conditionnements
+## 13. Unités d’achat et conditionnements
 
 Les biens peuvent désormais être achetés à l’unité, au paquet, au carton, à la boîte, au lot, au sac, au rouleau ou à la bouteille. Dans la fiche Produit, renseignez l’unité d’achat et le nombre d’unités de stock contenues dans un conditionnement.
 
@@ -105,7 +115,7 @@ Les anciennes fiches produits restent compatibles : lorsqu’aucun conditionneme
 Lors de l’annulation d’une commande, le coefficient mémorisé dans la ligne de commande est utilisé pour reprendre exactement les unités ajoutées au stock.
 
 
-## 13. Unité de stock et conditionnement d’achat
+## 14. Unité de stock et conditionnement d’achat
 
 La fiche Produit distingue maintenant deux notions : **l’unité de stock**, qui est l’unité réellement comptée dans le stock et les ventes, et le **conditionnement d’achat**, qui est l’unité utilisée pour commander auprès du fournisseur.
 
@@ -122,7 +132,7 @@ unités ajoutées au stock = quantité reçue × unités de stock par conditionn
 Les lignes de commande mémorisent leur unité de stock et leur facteur de conversion. Cette mémorisation protège l’historique : une modification ultérieure de la fiche Produit ne change pas la conversion déjà utilisée par une commande existante. Les anciennes fiches sans unité de stock explicite restent compatibles et utilisent `Unité` par défaut.
 
 
-## 14. Saisie rapide et guidée
+## 15. Saisie rapide et guidée
 
 Le formulaire Produit place automatiquement le curseur sur le type lors d’une nouvelle création. Après le choix de `Bien`, le curseur revient au nom, puis la touche `Entrée` fait progresser la saisie vers la catégorie, l’unité de stock, le conditionnement d’achat, le nombre d’unités, le seuil et les quantités initiales. À la fin, le formulaire est envoyé automatiquement.
 
@@ -131,7 +141,7 @@ Dans une commande, le curseur commence par le fournisseur. Après sa sélection,
 Cette navigation fonctionne avec la touche `Entrée` sur ordinateur et avec la validation du clavier mobile. Les boutons classiques restent disponibles pour les utilisateurs qui préfèrent la souris ou le toucher. Les contrôles anti-doublon et les validations obligatoires restent actifs.
 
 
-## 15. Assistant de saisie étape par étape
+## 16. Assistant de saisie étape par étape
 
 Les formulaires Produit et Commande fonctionnent maintenant comme des assistants. Dans Produits, une seule étape est visible à la fois : nature de l’article, nom, catégorie, prix, unité de stock, conditionnement d’achat, nombre d’unités, seuil et quantités initiales. Le choix de `Bien` ouvre automatiquement le parcours adapté ; les champs de service liés au stock ne sont pas proposés.
 
@@ -140,14 +150,14 @@ Dans Commandes, une seule ligne et une seule étape sont actives à la fois. Pou
 La touche `Entrée` avance dans le parcours. Dans une commande, `Ctrl + Entrée` sur ordinateur valide directement la commande complète ; sur Mac, utilisez `Cmd + Entrée`. Les boutons restent présents pour les utilisateurs qui préfèrent le clic ou le toucher. Le contrôle des doublons, les champs obligatoires et les conversions de stock restent actifs.
 
 
-## 16. Navigation mobile avec Retour et Continuer
+## 17. Navigation mobile avec Retour et Continuer
 
 Les assistants Produit et Commande disposent maintenant de boutons visibles **← Retour** et **Continuer →**. Le bouton Retour revient à l’étape précédente sans effacer les valeurs déjà saisies. Le bouton Continuer valide l’étape active ; si un champ obligatoire est vide, le téléphone affiche la correction attendue au lieu de perdre la saisie.
 
 À la dernière étape, le bouton Continuer est remplacé par la validation ou par l’ajout de la ligne suivante selon le parcours. Cette navigation ne dépend plus de la présence d’un clavier physique et convient à l’écran tactile du téléphone.
 
 
-## 17. Interface simplifiée
+## 18. Interface simplifiée
 
 La saisie Produit a été simplifiée : les informations principales sont désormais le nom, la nature, la catégorie, le prix et, pour un bien, l’unité suivie en stock, le mode d’achat et le nombre d’unités dans un achat. Le seuil d’alerte, le stock initial et les entrées manuelles sont regroupés dans **Options avancées du stock** et peuvent rester inchangés pour une première saisie.
 
@@ -156,7 +166,7 @@ La saisie Commande affiche le fournisseur et une ligne simple avec le bien, la q
 Pour le papier, l’utilisation courante se résume à : créer le produit `Papier rame A4`, choisir `Paquet` comme unité suivie en stock, choisir `Carton` dans `Achat en`, saisir `5` dans `Unités dans 1 achat`, puis enregistrer. Dans une commande, choisir le fournisseur, choisir le papier, saisir la quantité de cartons et le prix d’un carton.
 
 
-## 18. Saisie pédagogique pour un assistant
+## 19. Saisie pédagogique pour un assistant
 
 L’interface explique désormais chaque notion directement avant ou sous le champ concerné. **Unité suivie en stock** signifie ce qui est compté et vendu. Pour le papier, il faut choisir `Paquet`, et non `Feuille`, si l’activité ne vend pas les feuilles séparément. **Le fournisseur vous vend en** désigne le conditionnement réellement commandé, par exemple `Carton`. **Unités dans 1 achat** indique combien d’unités de stock contient ce conditionnement : un carton de cinq paquets correspond à `5`.
 

@@ -277,11 +277,13 @@
     body *{visibility:hidden !important;}
     #factureDetail,#factureDetail *{visibility:visible !important;}
     #factureDetail{position:absolute;left:0;top:0;width:100%;padding:0;margin:0;}
+    #rapportJournalier,#rapportJournalier *{visibility:visible !important;}
+    #rapportJournalier{position:absolute;left:0;top:0;width:100%;padding:8mm;margin:0;}
     .invoice-view{border:0;border-radius:0;box-shadow:none;padding:8mm;margin:0;}
     .invoice-view img{width:56px !important;height:56px !important;}
     .invoice-view table{font-size:10.5px;margin-top:5px;}
     .invoice-view th,.invoice-view td{padding:3px 2px;}
-    .invoice-actions{display:none !important;}
+    .invoice-actions,.report-actions{display:none !important;}
   }
 
   .splash-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:radial-gradient(circle at 18% 10%,rgba(90,140,240,.38),transparent 35%),linear-gradient(135deg,var(--navy-900),var(--navy-700) 58%,var(--blue-500));color:#fff;opacity:1;visibility:visible;transition:opacity .35s ease,visibility .35s ease;}
@@ -422,7 +424,7 @@ let state = {
   journalLoaded: false,
   loading: true,
   editing: { clients:null, produits:null, ventes:null, depenses:null, commandes:null },
-  search: { clients:'', produits:'', ventes:'', depenses:'', commandes:'' }
+  search: { clients:'', produits:'', ventes:'', services:'', depenses:'', commandes:'' }
 };
 
 const MODES_PAIEMENT = ['Espèces','Orange Money','MTN Mobile Money','Virement','Crédit'];
@@ -843,6 +845,8 @@ function totalAchatsClient(clientId){
 }
 
 function caTotal(){ return state.ventes.reduce((s,v)=>s+ventesTotal(v),0); }
+function caBiensTotal(){ return state.ventes.filter(v=>produitById(v.produitId)?.type==='Bien').reduce((s,v)=>s+ventesTotal(v),0); }
+function caServicesTotal(){ return state.ventes.filter(v=>produitById(v.produitId)?.type==='Service').reduce((s,v)=>s+ventesTotal(v),0); }
 function depensesTotal(){ return state.depenses.filter(d=>d.annulee!==true).reduce((s,d)=>s+Number(d.montant||0),0); }
 function beneficeEstime(){ return caTotal() - depensesTotal(); }
 function valeurStock(){
@@ -880,9 +884,11 @@ function tresorerieDisponible(){
    ============================================================ */
 const TABS_ALL = [
   {id:'accueil',    label:'🏠 Accueil',    roles:['proprietaire']},
+  {id:'rapports',   label:'📊 Rapports',  roles:['proprietaire','secretaire']},
   {id:'clients',    label:'👤 Clients',    roles:['proprietaire','secretaire']},
   {id:'produits',   label:'📦 Produits',   roles:['proprietaire','secretaire']},
   {id:'ventes',     label:'🛒 Ventes',     roles:['proprietaire','secretaire']},
+  {id:'services',   label:'🧰 Services',  roles:['proprietaire','secretaire']},
   {id:'depenses',   label:'💸 Dépenses',   roles:['proprietaire','secretaire']},
   {id:'factures',   label:'🧾 Factures',   roles:['proprietaire','secretaire']},
   {id:'fournisseurs',label:'🏭 Fournisseurs',roles:['proprietaire','secretaire']},
@@ -954,9 +960,11 @@ function render(){
   switch(state.activeTab){
     case 'demandesClients': app.innerHTML='<div class="empty">Chargement des demandes clients…</div>'; loadDemandesClientsAdmin().then(()=>{if(state.activeTab==='demandesClients'){app.innerHTML=viewDemandesClients();attachDemandesClientsHandlers();}}); return;
     case 'accueil': app.innerHTML = viewAccueil(); attachAccueilHandlers(); return;
+    case 'rapports': app.innerHTML = viewRapportJournalier(); attachRapportJournalierHandlers(); return;
     case 'clients': app.innerHTML = viewClients(); attachClientsHandlers(); return;
     case 'produits': app.innerHTML = viewProduits(); attachProduitsHandlers(); return;
-    case 'ventes': app.innerHTML = viewVentes(); attachVentesHandlers(); return;
+    case 'ventes': app.innerHTML = viewVentes('Bien'); attachVentesHandlers('Bien'); return;
+    case 'services': app.innerHTML = viewVentes('Service'); attachVentesHandlers('Service'); return;
     case 'depenses': app.innerHTML = viewDepenses(); attachDepensesHandlers(); return;
     case 'factures': app.innerHTML = viewFactures(); attachFacturesHandlers(); return;
     case 'fournisseurs': app.innerHTML = viewFournisseurs(); attachFournisseursHandlers(); return;
@@ -977,9 +985,11 @@ function viewAccueil(){
   const messagesNonLus=messagesClientsAdmin.filter(m=>m.senderRole==='client' && m.luAdmin!==true);
   const derniersMessages=[...messagesClientsAdmin].sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).slice(0,5);
   return `
-    <div class="dashboard-hero"><h2>Bonjour, ${esc(state.employeNom||'KlabCenter')}.</h2><p>Voici les éléments qui nécessitent votre attention aujourd’hui.</p><div class="dashboard-actions"><button class="btn" data-quick-tab="demandesClients">📨 Ouvrir les demandes</button><button class="btn" data-quick-tab="commandes">📋 Préparer une commande</button><button class="btn" data-quick-tab="ventes">🛒 Nouvelle vente</button></div></div>
+    <div class="dashboard-hero"><h2>Bonjour, ${esc(state.employeNom||'KlabCenter')}.</h2><p>Voici les éléments qui nécessitent votre attention aujourd’hui.</p><div class="dashboard-actions"><button class="btn" data-quick-tab="demandesClients">📨 Ouvrir les demandes</button><button class="btn" data-quick-tab="commandes">📋 Préparer une commande</button><button class="btn" data-quick-tab="ventes">🛒 Nouvelle vente</button><button class="btn" data-quick-tab="services">🧰 Nouvelle prestation</button></div></div>
     <div class="kpi-grid">
-      <div class="kpi-card metric-card"><div class="metric-icon">💰</div><div class="metric-copy"><div class="kpi-label">Chiffre d’affaires</div><div class="kpi-value num good">${fmtGNF(caTotal())}</div></div></div>
+      <div class="kpi-card metric-card"><div class="metric-icon">💰</div><div class="metric-copy"><div class="kpi-label">CA total</div><div class="kpi-value num good">${fmtGNF(caTotal())}</div></div></div>
+      <div class="kpi-card metric-card"><div class="metric-icon ok">📦</div><div class="metric-copy"><div class="kpi-label">CA biens</div><div class="kpi-value num good">${fmtGNF(caBiensTotal())}</div></div></div>
+      <div class="kpi-card metric-card"><div class="metric-icon">🧰</div><div class="metric-copy"><div class="kpi-label">CA services</div><div class="kpi-value num good">${fmtGNF(caServicesTotal())}</div></div></div>
       <div class="kpi-card metric-card"><div class="metric-icon danger">💸</div><div class="metric-copy"><div class="kpi-label">Dépenses</div><div class="kpi-value num bad">${fmtGNF(depensesTotal())}</div></div></div>
       <div class="kpi-card metric-card"><div class="metric-icon ok">📈</div><div class="metric-copy"><div class="kpi-label">Bénéfice estimé</div><div class="kpi-value num ${beneficeEstime()>=0?'good':'bad'}">${fmtGNF(beneficeEstime())}</div></div></div>
       <div class="kpi-card metric-card"><div class="metric-icon warn">⚠️</div><div class="metric-copy"><div class="kpi-label">Stock à surveiller</div><div class="kpi-value num ${alertes.length?'warn':'good'}">${alertes.length}</div></div></div>
@@ -989,7 +999,7 @@ function viewAccueil(){
     <div class="card"><h3>📨 Demandes clients <span class="status-badge">${demandesOuvertes.length} en attente</span></h3>${demandesOuvertes.length?`<div class="dashboard-list">${demandesOuvertes.slice(0,5).map(d=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(d.itemName||'Demande')} · ${esc(d.clientEmail||'Client')}</div><div class="row-meta">${d.quantite||1} · ${fmtGNF(d.total||0)} · ${esc(d.status||'Envoyée')}</div></div><span class="pill pill-warn">À traiter</span></div>`).join('')}</div>`:'<div class="empty">Aucune demande en attente.</div>'}<div class="btn-row"><button class="btn btn-primary" data-quick-tab="demandesClients">Voir toutes les demandes</button></div></div>
     <div class="card"><h3>📈 Évolution (6 derniers mois)</h3><canvas id="chartCA" height="190"></canvas></div>
     ${alertes.length>0 ? `<div class="card"><h3>⚠️ Articles à réapprovisionner</h3><div class="list">${alertes.map(p=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(p.nom)}</div><div class="row-meta">Stock actuel : ${stockActuel(p)}</div></div><span class="pill ${statutStock(p)==='RUPTURE'?'pill-danger':'pill-warn'}">${statutStock(p)}</span></div>`).join('')}</div></div>` : ''}
-    <div class="card"><h3>🕐 Dernières ventes</h3>${dernieresVentes.length===0 ? `<div class="empty">Aucune vente enregistrée pour l'instant.</div>` : `<div class="list">${dernieresVentes.map(v=>{const p=produitById(v.produitId);const c=clientById(v.clientId);return `<div class="row-item"><div class="row-main"><div class="row-title">${esc(p?p.nom:'—')}</div><div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)}</div></div><div class="row-amount">${fmtGNF(ventesTotal(v))}</div></div>`;}).join('')}</div>`}</div>
+    <div class="card"><h3>🕐 Dernières ventes</h3>${dernieresVentes.length===0 ? `<div class="empty">Aucune vente enregistrée pour l'instant.</div>` : `<div class="list">${dernieresVentes.map(v=>{const p=produitById(v.produitId);const c=clientById(v.clientId);return `<div class="row-item"><div class="row-main"><div class="row-title">${esc(p?p.nom:'—')} <span class="pill ${p?.type==='Service'?'pill-neutral':'pill-ok'}">${p?.type==='Service'?'Service':'Bien'}</span></div><div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)}</div></div><div class="row-amount">${fmtGNF(ventesTotal(v))}</div></div>`;}).join('')}</div>`}</div>
   `;
 }
 function monthlyData(months){
@@ -1303,34 +1313,38 @@ function attachProduitsHandlers(){
 /* ============================================================
    VUE — VENTES
    ============================================================ */
-function viewVentes(){
-  const editId = state.editing.ventes;
-  const editObj = editId ? state.ventes.find(v=>v.id===editId) : null;
-  const q = (state.search.ventes||'').toLowerCase();
+function viewVentes(typeFiltre='Bien'){
+  const editCandidateId = state.editing.ventes;
+  const editCandidate = editCandidateId ? state.ventes.find(v=>v.id===editCandidateId) : null;
+  const editId = editCandidate && produitById(editCandidate.produitId)?.type===typeFiltre ? editCandidateId : null;
+  const editObj = editId ? editCandidate : null;
+  const estService = typeFiltre==='Service';
+  const q = (state.search[estService?'services':'ventes']||'').toLowerCase();
   const list = [...state.ventes]
     .filter(v=>{
+      const p = produitById(v.produitId); if(p?.type!==typeFiltre) return false;
       if(!q) return true;
-      const p = produitById(v.produitId); const c = clientById(v.clientId);
+      const c = clientById(v.clientId);
       return (p?.nom||'').toLowerCase().includes(q) || (c?.nom||'').toLowerCase().includes(q) || (v.modePaiement||'').toLowerCase().includes(q);
     })
     .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const clientOptions = `<option value="">Client de passage</option>` + state.clients.map(c=>`<option value="${c.id}" ${editObj?.clientId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('');
-  const produitOptions = `<option value="">— Choisir —</option>` + state.produits.filter(p=>p.actif!==false).map(p=>`<option value="${p.id}" data-prix="${p.prix||0}" ${editObj?.produitId===p.id?'selected':''}>${esc(p.nom)}${p.type==='Bien'?' · stock '+stockActuel(p)+' unité(s)':''}</option>`).join('');
+  const produitOptions = `<option value="">— Choisir —</option>` + state.produits.filter(p=>p.actif!==false && p.type===typeFiltre).map(p=>`<option value="${p.id}" data-prix="${p.prix||0}" ${editObj?.produitId===p.id?'selected':''}>${esc(p.nom)}${estService?' · prestation':' · stock '+stockActuel(p)+' '+esc(uniteStock(p))}</option>`).join('');
   const editProduit = editObj ? produitById(editObj.produitId) : null;
   return `
-    <div class="section-title">Ventes</div>
-    <div class="section-sub">${state.ventes.length} vente(s) · CA total ${fmtGNF(caTotal())}</div>
+    <div class="section-title">${estService?'Services':'Ventes'}</div>
+    <div class="section-sub">${list.length} ${estService?'prestation(s)':'vente(s)'} affichée(s) · Total ${fmtGNF(list.reduce((s,v)=>s+ventesTotal(v),0))}</div>
 
     <div class="content-grid">
       <div class="card">
         <div id="connectionBadge" style="text-align:right;font-size:12px;margin-bottom:8px;"></div>
-        <h3>${editObj ? '✎ Modifier la vente' : '➕ Nouvelle vente'}</h3>
+        <h3>${editObj ? '✎ Modifier la '+(estService?'prestation':'vente') : '➕ Nouvelle '+(estService?'prestation':'vente')}</h3>
         ${editObj ? `<div class="editing-banner"><span>Modification en cours</span><a id="cancelEditVente">Annuler</a></div>` : ''}
         <form id="formVente" class="form-grid">
           <div class="field"><label>Date</label><input name="date" type="date" value="${editObj?.date||todayISO()}" required></div>
           <div class="field"><label>Client</label><select name="clientId">${clientOptions}</select></div>
-          <div class="field full"><label>Produit / Service *</label><select name="produitId" id="venteProduit" required>${produitOptions}</select></div>
-          <div class="field"><label>Quantité (unité de stock) *</label><input name="quantite" type="number" min="1" value="${editObj?.quantite||1}" required><div id="venteStockHelper" class="helper">${editProduit?.type==='Bien'?`Stock disponible : ${esc(libelleStock(editProduit,stockActuel(editProduit)))}. Achat habituel : ${esc(libelleConditionnement(editProduit))}.`:'Les services ne sont pas stockés.'}</div></div>
+          <div class="field full"><label>${estService?'Service':'Bien'} *</label><select name="produitId" id="venteProduit" required>${produitOptions}</select></div>
+          <div class="field"><label>${estService?'Quantité de prestation':'Quantité à vendre'} *</label><input name="quantite" type="number" min="1" value="${editObj?.quantite||1}" required><div id="venteStockHelper" class="helper">${estService?'Aucun stock : il s’agit d’une prestation.':`Stock disponible : ${esc(libelleStock(editProduit,stockActuel(editProduit)))}. Achat habituel : ${esc(libelleConditionnement(editProduit))}.`}</div></div>
           <div class="field"><label>Prix unitaire (GNF)</label><input name="prixUnitaire" id="ventePrix" type="number" min="0" placeholder="0" value="${editObj?.prixUnitaire??''}"></div>
           <div class="field">
             <label>Mode de paiement</label>
@@ -1344,7 +1358,7 @@ function viewVentes(){
       </div>
       <div>
         <div class="section-divider">Historique</div>
-        <div class="search-box"><input id="searchVentes" placeholder="Rechercher (client, produit, mode)…" value="${esc(state.search.ventes)}"></div>
+        <div class="search-box"><input id="searchVentes" placeholder="Rechercher (${estService?'client, service, mode':'client, bien, mode'})…" value="${esc(state.search[estService?'services':'ventes']||'')}"></div>
         <div id="ventesListWrap">${renderVentesList(list)}</div>
       </div>
     </div>
@@ -1361,7 +1375,7 @@ function renderVentesList(list){
       <div class="row-item">
         <div class="row-main">
           <div class="row-title">${esc(p?p.nom:'—')} ${statut}</div>
-          <div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)} · ${esc(v.modePaiement)} · Réglé ${fmtGNF(montantRegle(v))} / ${fmtGNF(ventesTotal(v))} · Qté ${v.quantite} ${esc(uniteStock(p))}</div>
+          <div class="row-meta">${esc(c?c.nom:'Client de passage')} · ${fmtDate(v.date)} · ${esc(v.modePaiement)} · Réglé ${fmtGNF(montantRegle(v))} / ${fmtGNF(ventesTotal(v))} · Qté ${v.quantite} ${p?.type==='Service'?'prestation(s)':esc(uniteStock(p))}</div>
         </div>
         <div class="row-amount">${fmtGNF(ventesTotal(v))}</div>
         ${montantRegle(v)<=0 ? `<button class="row-edit" data-edit-vente="${v.id}" title="Modifier">✎</button>` : `<span class="helper" title="Vente protégée après règlement">🔒</span>`}
@@ -1370,7 +1384,7 @@ function renderVentesList(list){
     }).join('')}
   </div>`;
 }
-function attachVentesHandlers(){
+function attachVentesHandlers(typeFiltre='Bien'){
   const selProduit = document.getElementById('venteProduit');
   const inputPrix = document.getElementById('ventePrix');
   const selMode = document.getElementById('venteMode');
@@ -1393,6 +1407,7 @@ function attachVentesHandlers(){
     const quantiteDemandee = Math.max(1, Math.floor(Number(fd.get('quantite'))||1));
     const total = quantiteDemandee * (Number(fd.get('prixUnitaire'))||0);
     const produitDemande = produitById(produitId);
+    if(produitDemande?.type!==typeFiltre){ showToast(`Cet élément n'appartient pas à l'onglet ${typeFiltre==='Service'?'Services':'Ventes'}.`); return; }
     if(produitDemande?.type==='Bien'){
       let disponible = Number(stockActuel(produitDemande)||0);
       // Lors de la modification d’une vente non réglée, on neutralise sa propre quantité déjà sortie.
@@ -1442,13 +1457,15 @@ function attachVentesHandlers(){
     });
   });
   const search = document.getElementById('searchVentes');
+  const searchKey = typeFiltre==='Service' ? 'services' : 'ventes';
   search?.addEventListener('input', ()=>{
-    state.search.ventes = search.value;
+    state.search[searchKey] = search.value;
     const q = search.value.toLowerCase();
     const list = [...state.ventes]
       .filter(v=>{
+        const p = produitById(v.produitId); if(p?.type!==typeFiltre) return false;
         if(!q) return true;
-        const p = produitById(v.produitId); const c = clientById(v.clientId);
+        const c = clientById(v.clientId);
         return (p?.nom||'').toLowerCase().includes(q) || (c?.nom||'').toLowerCase().includes(q) || (v.modePaiement||'').toLowerCase().includes(q);
       })
       .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
@@ -2012,6 +2029,35 @@ function attachCommandesHandlers(){
   document.querySelectorAll('[data-validate-commande]').forEach(b=>b.addEventListener('click',()=>validerCommande(b.dataset.validateCommande)));
   document.querySelectorAll('[data-cancel-commande]').forEach(b=>b.addEventListener('click',()=>annulerCommande(b.dataset.cancelCommande)));
 }
+
+/* ============================================================
+   VUE — RAPPORT JOURNALIER
+   ============================================================ */
+let rapportDate = todayISO();
+function rapportJournalierData(date){
+  const ventes = state.ventes.filter(v=>v.date===date);
+  const biens = ventes.filter(v=>produitById(v.produitId)?.type==='Bien');
+  const services = ventes.filter(v=>produitById(v.produitId)?.type==='Service');
+  const reglements = ventes.flatMap(v=>reglementsVente(v).map(r=>({...r,vente:v}))).filter(r=>r.date===date);
+  const depenses = state.depenses.filter(d=>d.date===date && d.annulee!==true);
+  const mouvements = state.mouvementsStock.filter(m=>m.date===date);
+  const encaissements = reglements.reduce((s,r)=>s+Number(r.montant||0),0);
+  const sorties = depenses.reduce((s,d)=>s+Number(d.montant||0),0);
+  const totalVentes = ventes.reduce((s,v)=>s+ventesTotal(v),0);
+  const totalBiens = biens.reduce((s,v)=>s+ventesTotal(v),0);
+  const totalServices = services.reduce((s,v)=>s+ventesTotal(v),0);
+  const creancesGenerees = ventes.reduce((s,v)=>s+resteVente(v),0);
+  const stockEntrees = mouvements.filter(m=>Number(m.quantite)>0).reduce((s,m)=>s+Number(m.quantite||0),0);
+  const stockSorties = mouvements.filter(m=>Number(m.quantite)<0).reduce((s,m)=>s+Math.abs(Number(m.quantite||0)),0);
+  return {ventes,biens,services,reglements,depenses,mouvements,encaissements,sorties,totalVentes,totalBiens,totalServices,creancesGenerees,stockEntrees,stockSorties};
+}
+function rapportLigneVente(v){const p=produitById(v.produitId),c=clientById(v.clientId);return `<tr><td>${esc(p?.nom||'—')}</td><td>${p?.type==='Service'?'Service':'Bien'}</td><td>${esc(c?.nom||'Passage')}</td><td>${v.quantite||0}</td><td>${fmtGNF(ventesTotal(v))}</td><td>${fmtGNF(montantRegle(v))}</td><td>${fmtGNF(resteVente(v))}</td></tr>`;}
+function viewRapportJournalier(){
+  const d=rapportJournalierData(rapportDate);
+  const parMode=['Espèces','Orange Money','MTN Mobile Money','Virement'].map(mode=>{const total=d.reglements.filter(r=>r.modePaiement===mode).reduce((s,r)=>s+Number(r.montant||0),0);return `<div class="row-item"><div class="row-main"><div class="row-title">${mode}</div><div class="row-meta">Encaissements du ${fmtDate(rapportDate)}</div></div><div class="row-amount">${fmtGNF(total)}</div></div>`;}).join('');
+  return `<div id="rapportJournalier" class="report-page"><div class="section-title">Rapport journalier</div><div class="section-sub">Synthèse des opérations du ${fmtDate(rapportDate)} · document interne KlabCenter</div><div class="report-actions card"><div class="form-grid"><div class="field"><label>Date du rapport</label><input id="rapportDate" type="date" value="${rapportDate}"></div><div class="field" style="align-self:end"><button class="btn btn-primary" id="btnPrintRapport">🖨️ Imprimer le rapport</button></div></div></div><div class="kpi-grid"><div class="kpi-card"><div class="kpi-label">CA total</div><div class="kpi-value num good">${fmtGNF(d.totalVentes)}</div></div><div class="kpi-card"><div class="kpi-label">CA biens</div><div class="kpi-value num good">${fmtGNF(d.totalBiens)}</div></div><div class="kpi-card"><div class="kpi-label">CA services</div><div class="kpi-value num good">${fmtGNF(d.totalServices)}</div></div><div class="kpi-card"><div class="kpi-label">Encaissé ce jour</div><div class="kpi-value num good">${fmtGNF(d.encaissements)}</div></div><div class="kpi-card"><div class="kpi-label">Dépenses</div><div class="kpi-value num bad">${fmtGNF(d.sorties)}</div></div><div class="kpi-card"><div class="kpi-label">Créances créées</div><div class="kpi-value num warn">${fmtGNF(d.creancesGenerees)}</div></div></div><div class="content-grid"><div class="card"><h3>Ventes et prestations</h3>${d.ventes.length?`<div class="invoice-view"><table><thead><tr><th>Article</th><th>Nature</th><th>Client</th><th>Qté</th><th>Total</th><th>Réglé</th><th>Reste</th></tr></thead><tbody>${d.ventes.map(rapportLigneVente).join('')}</tbody></table></div>`:'<div class="empty">Aucune vente ou prestation ce jour.</div>'}</div><div><div class="card"><h3>Encaissements par mode</h3><div class="list">${parMode}</div></div><div class="card"><h3>Stock</h3><div class="row-item"><div class="row-main"><div class="row-title">Entrées</div><div class="row-meta">Réceptions enregistrées</div></div><div class="row-amount">${d.stockEntrees}</div></div><div class="row-item"><div class="row-main"><div class="row-title">Sorties</div><div class="row-meta">Ventes de biens</div></div><div class="row-amount">${d.stockSorties}</div></div></div></div></div><div class="card"><h3>Dépenses du jour</h3>${d.depenses.length?`<div class="list">${d.depenses.map(x=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(x.description||x.categorie||'Dépense')}</div><div class="row-meta">${esc(x.modePaiement||'')} · ${esc(x.categorie||'')}</div></div><div class="row-amount">${fmtGNF(x.montant)}</div></div>`).join('')}</div>`:'<div class="empty">Aucune dépense ce jour.</div>'}</div><div class="helper">Le CA correspond aux ventes enregistrées à cette date. L’encaissement correspond uniquement aux règlements effectivement datés de ce jour. Les créances ne sont pas incluses dans la trésorerie disponible.</div></div>`;
+}
+function attachRapportJournalierHandlers(){document.getElementById('rapportDate')?.addEventListener('change',e=>{rapportDate=e.target.value||todayISO();render();});document.getElementById('btnPrintRapport')?.addEventListener('click',()=>window.print());}
 
 /* ============================================================
    VUE — TRÉSORERIE
