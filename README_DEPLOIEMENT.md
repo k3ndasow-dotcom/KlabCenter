@@ -86,7 +86,7 @@ La version v28 met également à jour le service worker. Après publication, fer
 
 L’onglet **Rapports** permet maintenant de choisir une période **Jour, Semaine, Mois, Année** ou une période personnalisée avec une date de début et une date de fin. Le rapport est imprimable en A4. Il sépare le chiffre d’affaires des biens et des services, détaille les ventes, les quantités, les règlements et les restes dus, puis présente les encaissements par mode, les dépenses de la période et les entrées/sorties de stock. Le chiffre d’affaires est rattaché à la date de vente, tandis que les encaissements sont rattachés à la date réelle de chaque règlement. Les créances restent exclues de la trésorerie disponible.
 
-Le rapport peut être **clôturé par le propriétaire**. Une période clôturée est signalée dans l’interface et les nouvelles ventes ou dépenses dont la date appartient à cette période sont refusées afin de préserver la cohérence du rapport.
+Le rapport peut être **clôturé par le propriétaire**. Pour clôturer la journée, ouvrez l’accueil et appuyez sur le bouton **🔒 Clôturer la journée**. KlabCenter ouvre automatiquement le rapport du jour ; vérifiez les totaux puis confirmez la clôture. L’action est également disponible dans l’onglet Rapports. Une période clôturée est signalée dans l’interface et les nouvelles ventes ou dépenses dont la date appartient à cette période sont refusées afin de préserver la cohérence du rapport.
 
 L’onglet **Créances** regroupe les ventes et prestations non réglées ou partiellement réglées, avec le total restant à recouvrer, le client, l’opération et un accès direct à l’enregistrement du règlement dans Trésorerie.
 
