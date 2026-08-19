@@ -94,6 +94,8 @@ Dans **Demandes clients**, le propriétaire ou le secrétariat peut convertir un
 
 Le tableau de bord propose des accès directs vers les ventes, services, commandes, demandes clients, créances et journal stock. Il signale également les créances âgées d’au moins 30 jours. L’onglet Créances permet d’imprimer un reçu pour un règlement déjà enregistré. L’onglet Journal stock présente les réceptions, ventes et annulations avec date, référence, quantité et observations.
 
+Depuis les formulaires **Ventes** et **Services**, le bouton **Nouveau client** permet d’enregistrer rapidement un client avec seulement son nom, son numéro et son adresse. Le client est enregistré dans l’onglet Clients puis sélectionné automatiquement dans l’opération en cours. Si le numéro existe déjà, KlabCenter sélectionne le client existant afin d’éviter les doublons.
+
 ## 11. Version finale 2026.08
 
 La version finale affiche l’état de synchronisation dans l’en-tête. « En ligne · Synchronisé » signifie que la dernière écriture a été confirmée par Firebase. « Synchronisation… » indique qu’une écriture est en cours. « Échec de synchronisation » signifie que la donnée a pu rester localement sur l’appareil et qu’il faut reconnecter l’appareil avant de fermer la page.

@@ -1350,7 +1350,7 @@ function viewVentes(typeFiltre='Bien'){
         ${editObj ? `<div class="editing-banner"><span>Modification en cours</span><a id="cancelEditVente">Annuler</a></div>` : ''}
         <form id="formVente" class="form-grid">
           <div class="field"><label>Date</label><input name="date" type="date" value="${editObj?.date||todayISO()}" required></div>
-          <div class="field"><label>Client</label><select name="clientId">${clientOptions}</select></div>
+          <div class="field"><label>Client</label><select name="clientId" id="venteClientSelect">${clientOptions}</select><button type="button" class="btn btn-ghost" id="btnNouveauClientRapide" style="margin-top:8px;">＋ Nouveau client</button><div class="helper">Client de passage si vous ne souhaitez pas l’enregistrer.</div></div>
           <div class="field full"><label>${estService?'Service':'Bien'} *</label><select name="produitId" id="venteProduit" required>${produitOptions}</select></div>
           <div class="field"><label>${estService?'Quantité de prestation':'Quantité à vendre'} *</label><input name="quantite" type="number" min="1" value="${editObj?.quantite||1}" required><div id="venteStockHelper" class="helper">${estService?'Aucun stock : il s’agit d’une prestation.':`Stock disponible : ${esc(libelleStock(editProduit,stockActuel(editProduit)))}. Achat habituel : ${esc(libelleConditionnement(editProduit))}.`}</div></div>
           <div class="field"><label>Prix unitaire (GNF)</label><input name="prixUnitaire" id="ventePrix" type="number" min="0" placeholder="0" value="${editObj?.prixUnitaire??''}"></div>
@@ -1392,8 +1392,10 @@ function renderVentesList(list){
     }).join('')}
   </div>`;
 }
+async function creerClientRapideDepuisVente(){const nom=await customPrompt('Nom complet du client',{title:'Nouveau client — 1/3',placeholder:'Ex : Mamadou Diallo',okText:'Continuer'});if(!nom||!nom.trim())return;const telephone=await customPrompt('Numéro de téléphone',{title:'Nouveau client — 2/3',placeholder:'Ex : 628 00 00 00',okText:'Continuer'});if(telephone===null)return;const adresse=await customPrompt('Adresse du client',{title:'Nouveau client — 3/3',placeholder:'Quartier, ville',okText:'Enregistrer'});if(adresse===null)return;const phone=telephone.trim();const existant=state.clients.find(c=>phone&&c.telephone&&c.telephone.trim()===phone);if(existant){document.getElementById('venteClientSelect').value=existant.id;showToast('Client existant sélectionné');return;}const client={id:uid('cli'),nom:nom.trim(),telephone:phone,adresse:adresse.trim(),email:'',notes:'Créé depuis une '+(state.activeTab==='services'?'prestation':'vente'),dateCreation:todayISO()};state.clients.push(client);await persist('clients','creation_rapide');const sel=document.getElementById('venteClientSelect');if(sel){const opt=document.createElement('option');opt.value=client.id;opt.textContent=client.nom;sel.appendChild(opt);sel.value=client.id;}showToast('Client enregistré et sélectionné');}
 function attachVentesHandlers(typeFiltre='Bien'){
   const selProduit = document.getElementById('venteProduit');
+  document.getElementById('btnNouveauClientRapide')?.addEventListener('click',creerClientRapideDepuisVente);
   const inputPrix = document.getElementById('ventePrix');
   const selMode = document.getElementById('venteMode');
   selProduit?.addEventListener('change', ()=>{
