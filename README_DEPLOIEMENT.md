@@ -92,6 +92,8 @@ L’onglet **Créances** regroupe les ventes et prestations non réglées ou par
 
 Dans **Demandes clients**, le propriétaire ou le secrétariat peut convertir une demande acceptée en vente ou en prestation. Les biens sont contrôlés par rapport au stock disponible et créent leur mouvement de sortie ; les services sont créés sans mouvement de stock. La demande conserve son identifiant d’origine pour la traçabilité.
 
+Le tableau de bord propose des accès directs vers les ventes, services, commandes, demandes clients, créances et journal stock. Il signale également les créances âgées d’au moins 30 jours. L’onglet Créances permet d’imprimer un reçu pour un règlement déjà enregistré. L’onglet Journal stock présente les réceptions, ventes et annulations avec date, référence, quantité et observations.
+
 ## 11. Version finale 2026.08
 
 La version finale affiche l’état de synchronisation dans l’en-tête. « En ligne · Synchronisé » signifie que la dernière écriture a été confirmée par Firebase. « Synchronisation… » indique qu’une écriture est en cours. « Échec de synchronisation » signifie que la donnée a pu rester localement sur l’appareil et qu’il faut reconnecter l’appareil avant de fermer la page.
