@@ -84,7 +84,7 @@ Les demandes du portail client continuent d’afficher les biens et les services
 
 La version v28 met également à jour le service worker. Après publication, fermer puis rouvrir l’application installée, ou actualiser le site une fois en ligne, afin de charger le nouveau cache.
 
-L’onglet **Rapports** permet de sélectionner n’importe quelle date et de produire une synthèse journalière imprimable en A4. Le rapport sépare le chiffre d’affaires des biens et des services, détaille les ventes, les quantités, les règlements et les restes dus, puis présente les encaissements par mode, les dépenses du jour et les entrées/sorties de stock. Le chiffre d’affaires est rattaché à la date de vente, tandis que les encaissements sont rattachés à la date réelle de chaque règlement. Les créances restent exclues de la trésorerie disponible.
+L’onglet **Rapports** permet maintenant de choisir une période **Jour, Semaine, Mois, Année** ou une période personnalisée avec une date de début et une date de fin. Le rapport est imprimable en A4. Il sépare le chiffre d’affaires des biens et des services, détaille les ventes, les quantités, les règlements et les restes dus, puis présente les encaissements par mode, les dépenses de la période et les entrées/sorties de stock. Le chiffre d’affaires est rattaché à la date de vente, tandis que les encaissements sont rattachés à la date réelle de chaque règlement. Les créances restent exclues de la trésorerie disponible.
 
 ## 11. Version finale 2026.08
 
