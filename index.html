@@ -317,6 +317,9 @@
   @media (min-width:900px){.dashboard-columns{grid-template-columns:1fr 1fr;}}
   ::selection{background:var(--blue-300);}
   @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
+
+  /* ===== AUDIT V32 : recherche universelle, alertes, sauvegarde et traçabilité ===== */
+  .kc-global-search{margin-top:10px;position:relative}.kc-global-search input{width:100%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:10px;padding:9px 12px;font-size:12px;outline:none}.kc-global-search input::placeholder{color:#dce6fa}.kc-search-results{position:absolute;left:0;right:0;top:43px;background:#fff;color:var(--text-900);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 35px rgba(16,32,64,.18);z-index:100;max-height:360px;overflow:auto}.kc-search-item{padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer}.kc-search-item:last-child{border-bottom:0}.kc-search-item:hover{background:var(--bg)}.kc-search-type{font-size:9px;text-transform:uppercase;color:var(--text-500);font-weight:700}.kc-search-name{font-weight:700;font-size:12px}.kc-search-meta{font-size:10px;color:var(--text-500)}.audit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.audit-alert{border-left:4px solid var(--warn);background:var(--warn-bg);padding:10px;border-radius:10px}.audit-alert.danger{border-left-color:var(--danger);background:var(--danger-bg)}.audit-alert.ok{border-left-color:var(--ok);background:var(--ok-bg)}.table-wrap{overflow:auto}.kc-data-table{width:100%;border-collapse:collapse;font-size:11px}.kc-data-table th,.kc-data-table td{padding:8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}.kc-data-table th{background:var(--bg);font-weight:700}.kc-mode-toggle{display:flex;gap:6px;margin-bottom:10px}.kc-mode-toggle button.active{background:var(--blue-500);color:#fff}
 </style>
 </head>
 <body>
@@ -407,13 +410,14 @@ function updateConnectionBadge(){ const el=document.getElementById('connectionBa
 const KEYS = {
   clients:'kc_clients', produits:'kc_produits', ventes:'kc_ventes',
   depenses:'kc_depenses', factures:'kc_factures', fournisseurs:'kc_fournisseurs', commandes:'kc_commandes', mouvementsStock:'kc_mouvements_stock', parametres:'kc_parametres',
-  tresorerie:'kc_tresorerie'
+  tresorerie:'kc_tresorerie', ajustementsFinanciers:'kc_ajustements_financiers', taches:'kc_taches', promotions:'kc_promotions', preferences:'kc_preferences'
 };
 
 let state = {
   clients: [], produits: [], ventes: [], depenses: [], factures: [], fournisseurs: [], commandes: [], mouvementsStock: [],
   parametres: { nom:'KlabCenter', telephone:'', adresse:'Kankalabé Centre, en face de la Mosquée du Centre', email:'klabcentergn@gmail.com', devise:'GNF', nif:'', clotures:[] },
   tresorerie: { soldeDepart: 0 },
+  ajustementsFinanciers: [], taches: [], promotions: [], preferences: {theme:'light',fontSize:'normal',notifications:true},
   activeTab: 'accueil',
   role: 'proprietaire', // 'proprietaire' | 'tresorier' | 'secretaire'
   employes: [],
@@ -559,10 +563,50 @@ async function journaliserAction(key, action){
 // Le 2e paramètre (optionnel) déclenche une entrée de journal si l'auteur est un employé :
 // persist('clients', 'creation') ou persist('clients', 'modification').
 async function persist(key, action){
+  const before = state.__auditBefore?.[key] ?? null;
   const ok = await storageSet(KEYS[key], state[key]);
-  if(!ok) showToast("⚠️ Donnée conservée localement, mais non confirmée par Firebase. Reconnectez-vous avant de fermer.");
+  if(!ok){ try{ const q=JSON.parse(localStorage.getItem(userKey('write_queue'))||'[]'); q.push({id:uid('q'),key,action:action||'modification',snapshot:cloneAudit(state[key]),at:new Date().toISOString()}); localStorage.setItem(userKey('write_queue'),JSON.stringify(q.slice(-50))); }catch(e){} showToast("⚠️ Donnée conservée localement et placée dans la file hors ligne."); }
   if(key==='produits' && estProprietaire()) await publishPublicCatalogue();
-  if(action) journaliserAction(key, action);
+  if(action) {
+    journaliserAction(key, action);
+    enregistrerAuditDetaille(key, action, before, state[key]);
+  }
+  if(state.__auditBefore) delete state.__auditBefore[key];
+}
+
+/* ===== AUDIT V32 : traçabilité détaillée ===== */
+function cloneAudit(v){ try{return JSON.parse(JSON.stringify(v));}catch(e){return null;} }
+function preparerAuditAvant(key){ if(!state.__auditBefore) state.__auditBefore={}; if(!(key in state.__auditBefore)) state.__auditBefore[key]=cloneAudit(state[key]); }
+async function enregistrerAuditDetaille(key, action, before, after){
+  if(!currentUser || !dataOwnerUid) return;
+  try{ await db.collection('journal_actions').add({ownerUid:dataOwnerUid,auteurUid:currentUser.uid,auteur:state.employeNom||currentUser.email||'',role:state.role,typeDonnee:KEYS[key],action,avant:JSON.stringify(before),apres:JSON.stringify(after),appareil:navigator.userAgent.slice(0,180),horodatage:firebase.firestore.FieldValue.serverTimestamp()}); }catch(e){ console.warn('Audit détaillé non enregistré',e); }
+}
+function auditSnapshot(){ return {clients:state.clients,produits:state.produits,ventes:state.ventes,depenses:state.depenses,factures:state.factures,fournisseurs:state.fournisseurs,commandes:state.commandes,mouvementsStock:state.mouvementsStock,parametres:state.parametres,tresorerie:state.tresorerie}; }
+function sauvegardeVersionneeLocal(){
+  if(!estProprietaire()) return;
+  const key=userKey('backup_history'); let list=[]; try{list=JSON.parse(localStorage.getItem(key)||'[]')}catch(e){}
+  const snap={id:uid('backup'),createdAt:new Date().toISOString(),version:33,data:auditSnapshot()}; list.unshift(snap); list=list.slice(0,5);
+  try{localStorage.setItem(key,JSON.stringify(list));}catch(e){}
+  return snap;
+}
+async function enregistrerMetaBackup(snap){
+  if(!snap||!currentUser||!dataOwnerUid) return;
+  try{await db.collection('users').doc(dataOwnerUid).collection('backups').doc(snap.id).set({createdAt:snap.createdAt,version:snap.version,size:JSON.stringify(snap.data).length,auteurUid:currentUser.uid});}catch(e){console.warn('Métadonnée de sauvegarde non synchronisée',e);}
+}
+function suggestionReapprovisionnement(p){
+  const seuil=Math.max(0,Number(p.seuilAlerte||0)); const stock=stockActuel(p);
+  const ventes30=state.ventes.filter(v=>v.produitId===p.id && v.date && (Date.now()-new Date(v.date+'T12:00:00').getTime())<=30*86400000).reduce((s,v)=>s+Number(v.quantite||0),0);
+  const moyenne=ventes30/30; const cible=Math.max(seuil,Math.ceil(moyenne*14)); const suggestion=Math.max(0,Math.ceil(cible-stock));
+  return {stock,seuil,ventes30,suggestion};
+}
+function rechercheUniverselle(q){
+  q=(q||'').trim().toLowerCase(); if(q.length<2)return []; const out=[];
+  state.clients.forEach(x=>{if(`${x.nom} ${x.telephone||''}`.toLowerCase().includes(q))out.push({type:'Client',nom:x.nom,meta:x.telephone||'',tab:'clients',id:x.id});});
+  state.produits.forEach(x=>{if(`${x.nom} ${x.code||''}`.toLowerCase().includes(q))out.push({type:x.type==='Service'?'Service':'Produit',nom:x.nom,meta:x.code||`${stockActuel(x)} en stock`,tab:x.type==='Service'?'services':'produits',id:x.id});});
+  state.ventes.forEach(x=>{if(`${x.numero||''} ${x.reference||''}`.toLowerCase().includes(q))out.push({type:'Vente',nom:x.numero||x.id,meta:fmtDate(x.date),tab:'ventes',id:x.id});});
+  state.commandes.forEach(x=>{const f=fournisseurById(x.fournisseurId);if(`${x.numero||''} ${f?.nom||''}`.toLowerCase().includes(q))out.push({type:'Commande',nom:x.numero||x.id,meta:f?.nom||'',tab:'commandes',id:x.id});});
+  state.factures.forEach(x=>{if(`${x.numero||''} ${x.reference||''}`.toLowerCase().includes(q))out.push({type:'Facture',nom:x.numero||x.id,meta:fmtDate(x.date),tab:'factures',id:x.id});});
+  return out.slice(0,20);
 }
 
 /* ============================================================
@@ -899,6 +943,7 @@ const TABS_ALL = [
   {id:'tresorerie', label:'💰 Trésorerie', roles:['proprietaire','tresorier']},
   {id:'employes',   label:'🧑‍💼 Employés', roles:['proprietaire']},
   {id:'parametres', label:'⚙️ Paramètres', roles:['proprietaire']},
+  {id:'auditPro', label:'🧠 Centre Audit PRO', roles:['proprietaire']},
 ];
 function getTabs(){ return TABS_ALL.filter(t=>t.roles.includes(state.role)); }
 
@@ -911,18 +956,18 @@ function renderTabs(){
   });
 }
 
+const setHeaderDateBase = setHeaderDate;
 function setHeaderDate(){
-  const btn = document.getElementById('btnHeaderLogout');
-  if(btn){
-    btn.style.display = 'inline-flex';
-    if(!btn.dataset.bound){
-      btn.dataset.bound = '1';
-      btn.addEventListener('click', async ()=>{ if(await customConfirm('Se déconnecter de votre compte KlabCenter ?', {title:'Déconnexion', okText:'Se déconnecter'})) await logout(); });
-    }
-  }
-  const el = document.getElementById('headerDate');
-  const d = new Date();
-  el.innerHTML = d.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short'}) + '<br>' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  setHeaderDateBase();
+  const header=document.querySelector('header.app-header');
+  if(!header || header.querySelector('.kc-global-search')) return;
+  const box=document.createElement('div'); box.className='kc-global-search';
+  box.innerHTML='<input id="kcGlobalSearch" autocomplete="off" placeholder="Rechercher client, produit, vente, commande ou facture…"><div id="kcSearchResults" class="kc-search-results" hidden></div>';
+  header.appendChild(box);
+  const input=box.querySelector('#kcGlobalSearch'), results=box.querySelector('#kcSearchResults');
+  input.addEventListener('input',()=>{const items=rechercheUniverselle(input.value);results.hidden=!input.value.trim()||!items.length;results.innerHTML=items.map(x=>`<div class="kc-search-item" data-tab="${x.tab}"><div class="kc-search-type">${esc(x.type)}</div><div class="kc-search-name">${esc(x.nom)}</div><div class="kc-search-meta">${esc(x.meta)}</div></div>`).join('');});
+  results.addEventListener('click',e=>{const item=e.target.closest('.kc-search-item');if(!item)return;state.activeTab=item.dataset.tab;results.hidden=true;input.value='';render();});
+  document.addEventListener('click',e=>{if(!box.contains(e.target))results.hidden=true;});
 }
 
 let demandesClientsAdmin=[]; let messagesClientsAdmin=[]; let unsubscribeDemandesClientsAdmin=null; let unsubscribeMessagesClientsAdmin=null;
@@ -978,6 +1023,7 @@ function render(){
     case 'tresorerie': app.innerHTML = viewTresorerie(); attachTresorerieHandlers(); return;
     case 'employes': app.innerHTML = viewEmployes(); attachEmployesHandlers(); return;
     case 'parametres': app.innerHTML = viewParametres(); attachParametresHandlers(); return;
+    case 'auditPro': app.innerHTML = viewAuditPro(); attachAuditProHandlers(); return;
   }
 }
 
@@ -1909,7 +1955,7 @@ function viewCommandes(){
   const lignes=commandeLignesTmp.length?commandeLignesTmp:[{produitId:'',quantite:1,prixUnitaire:0}];
   const fournisseurOptions='<option value="">— Choisir un fournisseur —</option>'+state.fournisseurs.map(f=>`<option value="${f.id}" ${commandeFormTmp.fournisseurId===f.id?'selected':''}>${esc(f.nom)}</option>`).join('');
   const liste=[...state.commandes].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const historyHtml = liste.length===0 ? '<div class="empty">Aucune commande préparée.</div>' : '<div class="list">' + liste.map(c=>{ const f=fournisseurById(c.fournisseurId); const statut=statutCommande(c); const receive=statut!=='Réceptionnée'&&statut!=='Annulée' ? '<button class="btn btn-primary" style="padding:6px 9px;font-size:11px;" data-receive-commande="'+c.id+'">Réceptionner</button>' : ''; const validate=estProprietaire()&&c.statut==='Brouillon' ? '<button class="btn btn-primary" style="padding:6px 9px;font-size:11px;" data-validate-commande="'+c.id+'">Valider & payer</button>' : ''; const cancel=estProprietaire()&&c.statut!=='Annulée' ? '<button class="row-del" data-cancel-commande="'+c.id+'" title="Annuler la commande">✕</button>' : ''; const edit=commandeModifiable(c) ? '<button class="btn btn-ghost" style="padding:6px 9px;font-size:11px;" data-edit-commande="'+c.id+'" title="Modifier ou ajouter un article">✎ Modifier / ajouter</button>' : ''; return '<div class="row-item"><div class="row-main"><div class="row-title">'+esc(c.numero)+' · '+esc(f?f.nom:'Fournisseur supprimé')+'</div><div class="row-meta">'+fmtDate(c.date)+' · '+statut+' · '+c.lignes.length+' ligne(s) · Total '+fmtGNF(commandeTotal(c))+(c.modePaiement?' · '+esc(c.modePaiement):'')+'</div></div>'+edit+'<button class="row-edit" data-print-commande="'+c.id+'" title="Imprimer">⎙</button>'+validate+receive+cancel+'</div>'; }).join('') + '</div>';
+  const historyHtml = state.commandeTableMode ? `<div class="table-scroll"><table><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th>Statut</th><th>Lignes</th><th>Total</th></tr></thead><tbody>${liste.map(c=>{const f=fournisseurById(c.fournisseurId);return `<tr><td>${esc(c.numero)}</td><td>${fmtDate(c.date)}</td><td>${esc(f?.nom||'—')}</td><td>${esc(statutCommande(c))}</td><td>${c.lignes?.length||0}</td><td>${fmtGNF(commandeTotal(c))}</td></tr>`}).join('')}</tbody></table></div>` : (liste.length===0 ? '<div class="empty">Aucune commande préparée.</div>' : '<div class="list">' + liste.map(c=>{ const f=fournisseurById(c.fournisseurId); const statut=statutCommande(c); const receive=statut!=='Réceptionnée'&&statut!=='Annulée' ? '<button class="btn btn-primary" style="padding:6px 9px;font-size:11px;" data-receive-commande="'+c.id+'">Réceptionner</button>' : ''; const validate=estProprietaire()&&c.statut==='Brouillon' ? '<button class="btn btn-primary" style="padding:6px 9px;font-size:11px;" data-validate-commande="'+c.id+'">Valider & payer</button>' : ''; const cancel=estProprietaire()&&c.statut!=='Annulée' ? '<button class="row-del" data-cancel-commande="'+c.id+'" title="Annuler la commande">✕</button>' : ''; const edit=commandeModifiable(c) ? '<button class="btn btn-ghost" style="padding:6px 9px;font-size:11px;" data-edit-commande="'+c.id+'" title="Modifier ou ajouter un article">✎ Modifier / ajouter</button>' : ''; return '<div class="row-item"><div class="row-main"><div class="row-title">'+esc(c.numero)+' · '+esc(f?f.nom:'Fournisseur supprimé')+'</div><div class="row-meta">'+fmtDate(c.date)+' · '+statut+' · '+c.lignes.length+' ligne(s) · Total '+fmtGNF(commandeTotal(c))+(c.modePaiement?' · '+esc(c.modePaiement):'')+'</div></div>'+edit+'<button class="row-edit" data-print-commande="'+c.id+'" title="Imprimer">⎙</button><button class="btn btn-ghost" data-duplicate-commande="'+c.id+'" title="Dupliquer">⧉</button>'+validate+receive+cancel+'</div>'; }).join('') + '</div>');
   return `<div class="section-title">Commandes d’approvisionnement</div>
     <div class="section-sub">Saisissez les articles progressivement, puis utilisez « Modifier / ajouter » pour ajuster une quantité, un prix ou ajouter un article sans effacer les autres saisies. La validation globale n’empêche plus ces ajustements avant réception ; le stock ne change qu’à la réception.</div>
     <div class="content-grid">
@@ -1925,7 +1971,7 @@ function viewCommandes(){
           <div class="btn-row full"><button class="btn btn-primary" type="submit">${editObj?'Enregistrer les modifications':'Enregistrer la commande'}</button></div>
         </form>
       </div>
-      <div><div class="section-divider">Historique des commandes</div>
+      <div><div class="section-divider">Historique des commandes <button class="btn btn-ghost" id="btnCommandeTableMode">▦ Mode tableau</button></div>
         ${historyHtml}
       </div>
     </div>`;
@@ -2053,6 +2099,8 @@ function attachCommandesHandlers(){
     await persist('commandes',editId?'modification':'creation'); showToast(depenseModifiee?'Commande modifiée et paiement mis à jour':catalogueAjoute?'Commande enregistrée et nouveau bien ajouté au catalogue':'Commande enregistrée'); render();
   });
   document.querySelectorAll('[data-edit-commande]').forEach(b=>b.addEventListener('click',()=>{const c=state.commandes.find(x=>x.id===b.dataset.editCommande);if(!commandeModifiable(c)){showToast('Cette commande ne peut plus être modifiée après réception.');return;}state.editing.commandes=c.id;commandeFormTmp={fournisseurId:c.fournisseurId||'',date:c.date||todayISO(),observations:c.observations||''};commandeLignesTmp=(c.lignes||[]).map(l=>({...l}));render();}));
+  document.getElementById('btnCommandeTableMode')?.addEventListener('click',()=>{state.commandeTableMode=!state.commandeTableMode;render();});
+  document.querySelectorAll('[data-duplicate-commande]').forEach(b=>b.addEventListener('click',async()=>{const c=state.commandes.find(x=>x.id===b.dataset.duplicateCommande);if(!c)return;const copy=JSON.parse(JSON.stringify(c));copy.id=uid('cmd');copy.numero='CMD-'+String(state.commandes.length+1).padStart(4,'0');copy.statut='Brouillon';copy.depenseId=null;copy.date=todayISO();copy.dateValidation=null;copy.dateDerniereReception=null;copy.lignes=(copy.lignes||[]).map(l=>({...l,quantiteRecue:0}));state.commandes.push(copy);await persist('commandes','duplication');showToast('Commande dupliquée en brouillon');render();}));
   document.querySelectorAll('[data-print-commande]').forEach(b=>b.addEventListener('click',()=>imprimerCommande(b.dataset.printCommande)));
   document.querySelectorAll('[data-receive-commande]').forEach(b=>b.addEventListener('click',()=>receptionnerCommande(b.dataset.receiveCommande)));
   document.querySelectorAll('[data-validate-commande]').forEach(b=>b.addEventListener('click',()=>validerCommande(b.dataset.validateCommande)));
@@ -2088,7 +2136,9 @@ function viewRapportJournalier(){
   return `<div id="rapportJournalier" class="report-page"><div class="section-title">Rapport d’activité</div><div class="section-sub">Synthèse du ${libelle} · document interne KlabCenter ${cloturee?'<span class="pill pill-ok">Période clôturée</span>':''}</div><div class="report-actions card"><div class="btn-row"><button class="btn ${rapportPeriode.type==='jour'?'btn-primary':'btn-ghost'}" data-rapport-periode="jour">Jour</button><button class="btn ${rapportPeriode.type==='semaine'?'btn-primary':'btn-ghost'}" data-rapport-periode="semaine">Semaine</button><button class="btn ${rapportPeriode.type==='mois'?'btn-primary':'btn-ghost'}" data-rapport-periode="mois">Mois</button><button class="btn ${rapportPeriode.type==='année'?'btn-primary':'btn-ghost'}" data-rapport-periode="année">Année</button>${!cloturee&&estProprietaire()?`<button class="btn btn-primary" id="btnCloturerRapport">🔒 ${rapportPeriode.debut===rapportPeriode.fin?'Clôturer la journée':'Clôturer cette période'}</button>`:''}</div><div class="form-grid" style="margin-top:10px;"><div class="field"><label>Du</label><input id="rapportDebut" type="date" value="${rapportPeriode.debut}"></div><div class="field"><label>Au</label><input id="rapportFin" type="date" value="${rapportPeriode.fin}"></div><div class="field" style="align-self:end"><button class="btn btn-primary" id="btnAppliquerRapport">Appliquer</button> <button class="btn btn-ghost" id="btnPrintRapport">Imprimer</button></div></div></div><div class="kpi-grid"><div class="kpi-card"><div class="kpi-label">CA total</div><div class="kpi-value num good">${fmtGNF(d.totalVentes)}</div></div><div class="kpi-card"><div class="kpi-label">CA biens</div><div class="kpi-value num good">${fmtGNF(d.totalBiens)}</div></div><div class="kpi-card"><div class="kpi-label">CA services</div><div class="kpi-value num good">${fmtGNF(d.totalServices)}</div></div><div class="kpi-card"><div class="kpi-label">Encaissé</div><div class="kpi-value num good">${fmtGNF(d.encaissements)}</div></div><div class="kpi-card"><div class="kpi-label">Dépenses</div><div class="kpi-value num bad">${fmtGNF(d.sorties)}</div></div><div class="kpi-card"><div class="kpi-label">Créances</div><div class="kpi-value num warn">${fmtGNF(d.creancesGenerees)}</div></div></div><div class="content-grid"><div class="card"><h3>Ventes et prestations</h3>${d.ventes.length?`<div class="invoice-view"><table><thead><tr><th>Article</th><th>Nature</th><th>Client</th><th>Qté</th><th>Total</th><th>Réglé</th><th>Reste</th></tr></thead><tbody>${d.ventes.map(rapportLigneVente).join('')}</tbody></table></div>`:'<div class="empty">Aucune opération sur cette période.</div>'}</div><div><div class="card"><h3>Encaissements par mode</h3><div class="list">${parMode}</div></div><div class="card"><h3>Stock sur la période</h3><div class="row-item"><div class="row-main"><div class="row-title">Entrées</div><div class="row-meta">Réceptions</div></div><div class="row-amount">${d.stockEntrees}</div></div><div class="row-item"><div class="row-main"><div class="row-title">Sorties</div><div class="row-meta">Ventes de biens</div></div><div class="row-amount">${d.stockSorties}</div></div></div></div></div><div class="card"><h3>Dépenses</h3>${d.depenses.length?`<div class="list">${d.depenses.map(x=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(x.description||x.categorie||'Dépense')}</div><div class="row-meta">${esc(x.modePaiement||'')} · ${esc(x.categorie||'')}</div></div><div class="row-amount">${fmtGNF(x.montant)}</div></div>`).join('')}</div>`:'<div class="empty">Aucune dépense sur cette période.</div>'}</div><div class="helper">Le CA est calculé selon la date des ventes. Les encaissements sont calculés selon la date réelle des règlements. Les créances ne sont pas incluses dans la trésorerie disponible.</div></div>`;
 }
 function attachRapportJournalierHandlers(){document.querySelectorAll('[data-rapport-periode]').forEach(b=>b.addEventListener('click',()=>definirPeriodeRapport(b.dataset.rapportPeriode)));document.getElementById('btnAppliquerRapport')?.addEventListener('click',()=>{const debut=document.getElementById('rapportDebut').value,fin=document.getElementById('rapportFin').value;if(!debut||!fin||debut>fin){showToast('Période invalide');return;}rapportPeriode={debut,fin,type:'personnalisée'};render();});document.getElementById('btnPrintRapport')?.addEventListener('click',()=>window.print());document.getElementById('btnCloturerRapport')?.addEventListener('click',async()=>{if(!await customConfirm(`Clôturer la période ${rapportPeriode.debut} au ${rapportPeriode.fin} ? Les opérations futures devront être enregistrées sur une autre période.`,{title:'Clôture du rapport',okText:'Clôturer'}))return;if(!Array.isArray(state.parametres.clotures))state.parametres.clotures=[];state.parametres.clotures.push(clePeriodeRapport());state.parametres.clotures=[...new Set(state.parametres.clotures)];await persist('parametres','cloture');showToast('Période clôturée');render();});}
-function imprimerRecuReglement(v){const p=produitById(v.produitId),c=clientById(v.clientId),r=reglementsVente(v).slice(-1)[0];const w=window.open('','_blank');if(!w){showToast('Autorisez les fenêtres pop-up pour imprimer');return;}w.document.write(`<html><head><title>Reçu de règlement</title><style>body{font-family:Arial;padding:32px;max-width:700px;margin:auto;color:#152036}h1{color:#132C54;border-bottom:2px solid #1357d5;padding-bottom:12px}.total{font-size:20px;font-weight:bold;text-align:right;margin-top:24px}.signature{text-align:right;margin-top:70px}</style></head><body><h1>${esc(state.parametres.nom||'KlabCenter')}</h1><p>Reçu de règlement</p><p>Client : <strong>${esc(c?.nom||'Client de passage')}</strong><br>Opération : ${esc(p?.nom||'—')}<br>Date : ${fmtDate(r?.date||todayISO())}<br>Mode : ${esc(r?.modePaiement||v.modePaiement||'—')}</p><div class="total">Montant reçu : ${fmtGNF(r?.montant||0)}</div><p>Reste après règlement : ${fmtGNF(resteVente(v))}</p><div class="signature">Signé : Le PDG<br><strong>Mamadou Kenda SOW</strong></div></body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),250);}
+function imprimerRecuReglement(v){const p=produitById(v.produitId),c=clientById(v.clientId),r=reglementsVente(v).slice(-1)[0];const w=window.open('','_blank');if(!w){showToast('Autorisez les fenêtres pop-up pour imprimer');return;}w.document.write(`<html><head><title>Reçu de règlement</title><style>body{font-family:Arial;padding:32px;max-width:700px;margin:auto;color:#152036}h1{color:#132C54;border-bottom:2px solid #1357d5;padding-bottom:12px}.total{font-size:20px;font-weight:bold;text-align:right;margin-top:24px}.signature{text-align:right;margin-top:70px}
+  :root{--kc-font-scale:1}.app-shell,body{font-size:calc(14px * var(--kc-font-scale));} .audit-pro-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.notice{padding:10px 12px;border-radius:10px;background:#fff4df;margin:6px 0}.pill-danger{background:#ffe1e1;color:#a11}.pill-ok{background:#dff7e8;color:#17663b}.pill-neutral{background:#edf2f7;color:#455468}@media(max-width:800px){.audit-pro-grid{grid-template-columns:1fr}}html[data-theme="dark"] body{background:#0f172a;color:#e5e7eb}html[data-theme="dark"] .card,html[data-theme="dark"] .kpi-card{background:#172033;color:#e5e7eb;border-color:#26344e}html[data-theme="dark"] input,html[data-theme="dark"] select,html[data-theme="dark"] textarea{background:#101827;color:#fff;border-color:#334155}html[data-theme="dark"] .helper,html[data-theme="dark"] .section-sub{color:#aab7cc}
+</style></head><body><h1>${esc(state.parametres.nom||'KlabCenter')}</h1><p>Reçu de règlement</p><p>Client : <strong>${esc(c?.nom||'Client de passage')}</strong><br>Opération : ${esc(p?.nom||'—')}<br>Date : ${fmtDate(r?.date||todayISO())}<br>Mode : ${esc(r?.modePaiement||v.modePaiement||'—')}</p><div class="total">Montant reçu : ${fmtGNF(r?.montant||0)}</div><p>Reste après règlement : ${fmtGNF(resteVente(v))}</p><div class="signature">Signé : Le PDG<br><strong>Mamadou Kenda SOW</strong></div></body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),250);}
 function viewCreances(){const list=state.ventes.filter(v=>resteVente(v)>0).sort((a,b)=>(a.date||'').localeCompare(b.date||''));const retard=list.filter(v=>{const d=new Date(v.date+'T12:00:00'),n=new Date();return (n-d)/86400000>=30;});return `<div class="section-title">Créances clients</div><div class="section-sub">Suivi des ventes et prestations non réglées ou partiellement réglées.</div><div class="kpi-grid"><div class="kpi-card"><div class="kpi-label">Total à recouvrer</div><div class="kpi-value num warn">${fmtGNF(creancesEnCours())}</div></div><div class="kpi-card"><div class="kpi-label">Opérations concernées</div><div class="kpi-value num">${list.length}</div></div><div class="kpi-card"><div class="kpi-label">En retard de 30 jours</div><div class="kpi-value num bad">${retard.length}</div></div></div><div class="card"><h3>Créances en cours</h3>${list.length?`<div class="list">${list.map(v=>{const p=produitById(v.produitId),c=clientById(v.clientId);return `<div class="row-item"><div class="row-main"><div class="row-title">${esc(c?.nom||'Client de passage')} · ${esc(p?.nom||'—')}</div><div class="row-meta">${fmtDate(v.date)} · ${p?.type==='Service'?'Service':'Bien'} · Total ${fmtGNF(ventesTotal(v))} · Réglé ${fmtGNF(montantRegle(v))}</div></div><div class="row-amount">Reste ${fmtGNF(resteVente(v))}</div><button class="btn btn-ghost" data-regler-vente="${v.id}">Régler</button>${montantRegle(v)>0?`<button class="btn btn-ghost" data-recu-vente="${v.id}">Reçu</button>`:''}</div>`;}).join('')}</div>`:'<div class="empty">Aucune créance en cours.</div>'}</div>`;}
 function viewStockJournal(){const list=[...state.mouvementsStock].sort((a,b)=>(b.date||'').localeCompare(a.date||''));return `<div class="section-title">Journal des mouvements de stock</div><div class="section-sub">Historique des réceptions, ventes et annulations.</div><div class="card"><div class="list">${list.length?list.map(m=>{const p=produitById(m.produitId);return `<div class="row-item"><div class="row-main"><div class="row-title">${esc(p?.nom||'Produit archivé')} <span class="pill ${Number(m.quantite)>0?'pill-ok':'pill-warn'}">${esc(m.type||'Mouvement')}</span></div><div class="row-meta">${fmtDate(m.date)} · Référence ${esc(m.reference||'—')} · ${esc(m.notes||'')}</div></div><div class="row-amount">${Number(m.quantite)>0?'+':''}${m.quantite} ${esc(uniteStock(p))}</div></div>`;}).join(''):'<div class="empty">Aucun mouvement de stock.</div>'}</div></div>`;}
 function attachStockJournalHandlers(){}
@@ -2475,6 +2525,41 @@ function attachParametresHandlers(){
   });
 }
 
+
+/* ===== TABLEAU DE BORD V32 aligné audit ===== */
+const viewAccueilBase = viewAccueil;
+viewAccueil = function(){
+  const html=viewAccueilBase();
+  const alertes=state.produits.filter(p=>p.actif!==false&&p.type!=='Service').map(p=>({p,...suggestionReapprovisionnement(p)})).filter(x=>x.stock<=x.seuil||x.suggestion>0).sort((a,b)=>b.suggestion-a.suggestion).slice(0,8);
+  const caJour=state.ventes.filter(v=>v.date===todayISO()).reduce((s,v)=>s+ventesTotal(v),0);
+  const encJour=state.ventes.filter(v=>v.date===todayISO()).reduce((s,v)=>s+montantRegle(v),0);
+  const depMois=state.depenses.filter(d=>d.annulee!==true&&(d.date||'').slice(0,7)===todayISO().slice(0,7)).reduce((s,d)=>s+Number(d.montant||0),0);
+  const extra=`<div class="card"><h3>🎯 Pilotage décisionnel</h3><div class="audit-grid"><div class="kpi-card"><div class="kpi-label">CA aujourd’hui</div><div class="kpi-value num good">${fmtGNF(caJour)}</div></div><div class="kpi-card"><div class="kpi-label">Encaissements aujourd’hui</div><div class="kpi-value num good">${fmtGNF(encJour)}</div></div><div class="kpi-card"><div class="kpi-label">Créances à recouvrer</div><div class="kpi-value num warn">${fmtGNF(creancesEnCours())}</div></div><div class="kpi-card"><div class="kpi-label">Valeur du stock</div><div class="kpi-value num">${fmtGNF(valeurStock())}</div></div><div class="kpi-card"><div class="kpi-label">Dépenses du mois</div><div class="kpi-value num bad">${fmtGNF(depMois)}</div></div></div></div><div class="card"><h3>🧠 Réapprovisionnement intelligent</h3>${alertes.length?`<div class="list">${alertes.map(x=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(x.p.nom)}</div><div class="row-meta">Stock : ${x.stock} · Ventes 30 j : ${x.ventes30} · Seuil : ${x.seuil}</div></div><span class="pill ${x.stock<=0?'pill-danger':'pill-warn'}">Commander ${x.suggestion}</span></div>`).join('')}</div>`:'<div class="empty">Aucun réapprovisionnement suggéré.</div>'}</div>`;
+  return html+extra;
+};
+
+/* ===== SAUVEGARDE V32 : versionnée + aperçu + restauration sélective ===== */
+const exportBackupLegacy = exportBackup;
+exportBackup = async function(){
+  if(!estProprietaire()){showToast('Sauvegarde réservée au propriétaire');return;}
+  const snap=sauvegardeVersionneeLocal(); await enregistrerMetaBackup(snap);
+  const payload={format:'KlabCenter-backup',version:33,exportedAt:snap.createdAt,backupId:snap.id,data:snap.data};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`KlabCenter_sauvegarde_v32_${todayISO()}.json`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500); showToast('🛡️ Sauvegarde versionnée créée');
+};
+const importBackupLegacy = importBackup;
+importBackup = async function(file){
+  if(!estProprietaire()||!file)return;
+  try{const payload=JSON.parse(await file.text());if(payload.format!=='KlabCenter-backup'||!payload.data)throw new Error('Format invalide');
+    const domaines=Object.keys(KEYS).filter(k=>Object.prototype.hasOwnProperty.call(payload.data,k));
+    const choix=await customPrompt(`Domaines à restaurer (séparés par des virgules). Disponibles : ${domaines.join(', ')}`,{title:'Restauration sélective',defaultValue:domaines.join(','),placeholder:'clients,produits,…',okText:'Prévisualiser'}); if(choix===null)return;
+    const selected=String(choix).split(',').map(x=>x.trim()).filter(x=>domaines.includes(x)); if(!selected.length){showToast('Aucun domaine valide');return;}
+    const resume=selected.map(k=>`${LABELS_DONNEES[k]||k} : ${Array.isArray(payload.data[k])?payload.data[k].length+' élément(s)':'données'}`).join(' · ');
+    if(!await customConfirm(`Vous allez restaurer : ${resume}. Les autres domaines resteront inchangés. Continuer ?`,{title:'Confirmer la restauration',okText:'Restaurer',danger:true}))return;
+    for(const k of selected){preparerAuditAvant(k);state[k]=payload.data[k];await persist(k,'restauration');}
+    showToast('✅ Restauration sélective terminée');render();
+  }catch(e){console.error(e);showToast('Fichier de sauvegarde invalide');}
+};
+
 /* ============================================================
    INIT — voir onAuthStateChanged plus haut, qui déclenche loadAll()
    une fois l'utilisateur authentifié.
@@ -2502,6 +2587,77 @@ function showUpdateBanner(){
   document.getElementById('btnReloadUpdate').addEventListener('click', ()=> location.reload());
 }
 
+
+/* ===== V33 : finances immuables + ajustements traçables ===== */
+const _synchroniserDepenseCommande = synchroniserDepenseCommande;
+synchroniserDepenseCommande = function(c){
+  if(!c?.depenseId) return false;
+  const dep=state.depenses.find(d=>d.id===c.depenseId); if(!dep) return false;
+  const total=commandeTotal(c), ancien=Number(dep.montant||0);
+  if(ancien===total) return false;
+  // Une dépense liée à une commande validée est historique : on ne la réécrit plus.
+  const adj={id:uid('adj'),date:todayISO(),commandeId:c.id,depenseId:dep.id,montantInitial:ancien,montantFinal:total,delta:total-ancien,type:total>ancien?'Ajustement positif':'Ajustement négatif',auteurUid:currentUser?.uid||'',auteur:state.employeNom||currentUser?.email||'',createdAt:new Date().toISOString()};
+  state.ajustementsFinanciers=state.ajustementsFinanciers||[]; state.ajustementsFinanciers.push(adj);
+  return false;
+};
+
+/* ===== V33 : migration progressive vers documents unitaires ===== */
+async function migrerDonneesUnitaires(){
+  if(!estProprietaire()) return showToast('Migration réservée au propriétaire');
+  const domaines=['clients','produits','ventes','depenses','factures','fournisseurs','commandes'];
+  let total=0;
+  for(const k of domaines){
+    const coll=db.collection('users').doc(dataOwnerUid).collection('records').doc(k).collection('items');
+    for(const item of (state[k]||[])){ const id=String(item.id||uid(k.slice(0,3))); await coll.doc(id).set({...item,_migratedAt:firebase.firestore.FieldValue.serverTimestamp(),_updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true}); total++; }
+  }
+  await db.collection('users').doc(dataOwnerUid).collection('migration_meta').doc('v33').set({version:33,domains:domaines,total,completedAt:firebase.firestore.FieldValue.serverTimestamp()});
+  showToast(`✅ Migration unitaire terminée : ${total} document(s)`);
+}
+
+function csvEscape(v){const x=String(v??'');return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x;}
+function telechargerCSV(rows,name){if(!rows.length)return showToast('Aucune donnée à exporter');const keys=[...new Set(rows.flatMap(x=>Object.keys(x)))];const csv='\\ufeff'+[keys.map(csvEscape).join(','),...rows.map(r=>keys.map(k=>csvEscape(r[k])).join(','))].join('\\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function parseCSV(text){const lines=text.replace(/\r/g,'').split('\n').filter(Boolean);if(!lines.length)return [];const parse=l=>{const out=[];let cur='',q=false;for(let i=0;i<l.length;i++){const c=l[i];if(c==='"'){if(q&&l[i+1]==='"'){cur+='"';i++;}else q=!q;}else if(c===','&&!q){out.push(cur);cur='';}else cur+=c;}out.push(cur);return out;};const h=parse(lines[0]).map(x=>x.trim());return lines.slice(1).map(l=>{const a=parse(l),o={};h.forEach((k,i)=>o[k]=a[i]??'');return o;});}
+async function importerCSV(type,file){if(!file)return;try{const rows=parseCSV(await file.text());let errors=[],added=0;for(let i=0;i<rows.length;i++){const r=rows[i];if(type==='clients'){if(!String(r.Nom||r.nom||'').trim()){errors.push(i+2);continue;}state.clients.push({id:uid('cli'),nom:String(r.Nom||r.nom).trim(),telephone:String(r.Telephone||r.telephone||'').trim(),email:String(r.Email||r.email||'').trim(),adresse:String(r.Adresse||r.adresse||'').trim(),dateCreation:todayISO()});added++;}else if(type==='produits'){if(!String(r.Nom||r.nom||'').trim()){errors.push(i+2);continue;}state.produits.push({id:uid('prod'),nom:String(r.Nom||r.nom).trim(),type:'Bien',categorie:String(r.Categorie||r.Catégorie||'Autres'),prix:Number(r.Prix||r['Prix (GNF)']||0),stockInitial:Number(r.Stock||r['Stock actuel']||0),entrees:0,seuilAlerte:Number(r.Seuil||5),uniteStock:String(r.Unite||r['Unité stock']||'Unité'),uniteAchat:String(r['Unité achat']||'Unité'),actif:true,dateCreation:todayISO()});added++;}else if(type==='stock'){const p=state.produits.find(x=>(x.code&&x.code===r.Code)||x.nom?.toLowerCase()===String(r.Nom||'').toLowerCase());if(!p){errors.push(i+2);continue;}p.stockInitial=Number(r.Stock||r.Quantite||0);added++;}}await persist(type==='stock'?'produits':type,'import_csv');showToast(`Import ${type}: ${added} ligne(s) importée(s)${errors.length?` · ${errors.length} erreur(s)`:''}`);render();}catch(e){console.error(e);showToast('CSV invalide ou illisible');}}
+
+function fournisseurStats(f){const cmds=state.commandes.filter(c=>c.fournisseurId===f.id),tot=cmds.reduce((s,c)=>s+commandeTotal(c),0);const dates=cmds.map(c=>c.date).filter(Boolean).sort();let delai='—';if(dates.length>=2){const a=new Date(dates[0]),b=new Date(dates[dates.length-1]);delai=Math.max(0,Math.round((b-a)/86400000/(dates.length-1)))+' j';}return {cmds:cmds.length,tot,delai};}
+function advancedStats(){const ventes=state.ventes||[], ca=ventes.reduce((s,v)=>s+ventesTotal(v),0), marge=ventes.reduce((s,v)=>{const p=produitById(v.produitId);return s+(Number(v.prixUnitaire||0)-Number(p?.prixAchat||0))*Number(v.quantite||0)},0);const byCat={};ventes.forEach(v=>{const p=produitById(v.produitId),k=p?.categorie||'Autres';byCat[k]=(byCat[k]||0)+ventesTotal(v);});return {ca,marge,byCat};}
+function documentNumbering(){const p=state.parametres||{};return p.numerotation||{vente:'VTE-',facture:'FAC-',commande:'CMD-'};}
+function notificationsAudit(){if(state.preferences?.notifications===false)return [];const out=[];const aged=ventesCreditEnCours().filter(v=>(Date.now()-new Date((v.date||todayISO())+'T12:00:00'))/86400000>=30);if(aged.length)out.push(`🧾 ${aged.length} créance(s) âgées de 30 jours ou plus`);const low=state.produits.filter(p=>p.type!=='Service'&&['RUPTURE','FAIBLE'].includes(statutStock(p)));if(low.length)out.push(`📦 ${low.length} produit(s) à réapprovisionner`);const pending=state.commandes.filter(c=>!['Réceptionnée','Annulée'].includes(statutCommande(c)));if(pending.length)out.push(`📋 ${pending.length} commande(s) non réceptionnée(s)`);return out;}
+function applyPreferences(){const pref=state.preferences||{};document.documentElement.dataset.theme=pref.theme||'light';document.documentElement.style.setProperty('--kc-font-scale',pref.fontSize==='large'?'1.12':pref.fontSize==='small'?'0.94':'1');}
+function viewAuditPro(){
+ const st=advancedStats(), notes=notificationsAudit(), num=documentNumbering(), conf=state.preferences||{};
+ const fournisseurRows=state.fournisseurs.map(f=>{const s=fournisseurStats(f);return `<div class="row-item"><div class="row-main"><div class="row-title">${esc(f.nom)}</div><div class="row-meta">${s.cmds} commande(s) · ${fmtGNF(s.tot)} · délai moyen estimé : ${s.delai}</div></div><span class="pill pill-neutral">${s.cmds?'Fournisseur actif':'Nouveau'}</span></div>`}).join('')||'<div class="empty">Aucun fournisseur.</div>';
+ const tasks=state.taches||[];
+ return `<div class="section-title">🧠 Centre Audit PRO — V33</div><div class="section-sub">Toutes les recommandations opérationnelles de l’audit sont regroupées ici, sans créer de modules dispersés.</div>
+ <div class="audit-pro-grid"><div class="card"><h3>🔔 Notifications intelligentes</h3>${notes.length?notes.map(x=>`<div class="notice">${esc(x)}</div>`).join(''):'<div class="empty">Aucune alerte.</div>'}</div>
+ <div class="card"><h3>📈 Statistiques avancées</h3><div class="kpi-grid"><div class="kpi-card"><div class="kpi-label">CA cumulé</div><div class="kpi-value num">${fmtGNF(st.ca)}</div></div><div class="kpi-card"><div class="kpi-label">Marge estimée</div><div class="kpi-value num">${fmtGNF(st.marge)}</div></div></div>${Object.entries(st.byCat).map(([k,v])=>`<div class="row-item"><span>${esc(k)}</span><strong>${fmtGNF(v)}</strong></div>`).join('')}</div></div>
+ <div class="card"><h3>🏭 Suivi fournisseurs</h3>${fournisseurRows}</div>
+ <div class="card"><h3>🧾 Documents & numérotation</h3><form id="auditNumForm" class="form-grid"><div class="field"><label>Préfixe ventes</label><input name="vente" value="${esc(num.vente)}"></div><div class="field"><label>Préfixe factures</label><input name="facture" value="${esc(num.facture)}"></div><div class="field"><label>Préfixe commandes</label><input name="commande" value="${esc(num.commande)}"></div><div class="field full"><label>Statuts documentaires</label><div class="helper">Brouillon → Envoyé → Payé / Annulé. Les dates et auteurs sont conservés dans le journal d’audit.</div></div><div class="btn-row full"><button class="btn btn-primary">Enregistrer la numérotation</button></div></form></div>
+ <div class="audit-pro-grid"><div class="card"><h3>⚡ Import / export CSV</h3><div class="btn-row"><button class="btn btn-ghost" id="csvClients">Importer clients CSV</button><button class="btn btn-ghost" id="csvProduits">Importer produits CSV</button><button class="btn btn-ghost" id="csvStock">Importer stock CSV</button><button class="btn btn-primary" id="csvExport">Exporter données CSV</button></div><input id="auditCsvInput" type="file" accept=".csv,text/csv" hidden></div>
+ <div class="card"><h3>⭐ Rapidité de saisie</h3><div class="helper">Les favoris, la répétition et la duplication sont activés comme raccourcis d’exploitation. Utilise les opérations existantes puis le bouton Dupliquer lorsqu’il est proposé.</div><button class="btn btn-primary" id="addFavorite">⭐ Ajouter un produit favori</button></div></div>
+ <div class="card"><h3>🏷️ Promotions & remises</h3><form id="promoForm" class="form-grid"><div class="field"><label>Nom de la promotion</label><input name="nom" required placeholder="Ex. Promo rentrée"></div><div class="field"><label>Remise %</label><input name="remise" type="number" min="0" max="100" step="0.01" required></div><div class="field"><label>Début</label><input name="debut" type="date" required></div><div class="field"><label>Fin</label><input name="fin" type="date" required></div><div class="btn-row full"><button class="btn btn-primary">Créer la promotion</button></div></form>${(state.promotions||[]).map(x=>`<div class="row-item"><div><strong>${esc(x.nom)}</strong><div class="row-meta">${esc(x.debut)} → ${esc(x.fin)} · ${x.remise}% · ${x.active===false?'Désactivée':'Active'}</div></div><button class="btn btn-ghost" data-promo-toggle="${x.id}">${x.active===false?'Activer':'Désactiver'}</button></div>`).join('')||'<div class="empty">Aucune promotion.</div>'}</div>
+ <div class="card"><h3>📷 Code-barres mobile</h3><div class="helper">Si le navigateur prend en charge BarcodeDetector, la caméra peut rechercher un produit par son code. Sinon, utilisez la recherche universelle.</div><button class="btn btn-primary" id="btnBarcode">Scanner un code-barres</button></div>
+ <div class="card"><h3>📋 Tâches</h3><form id="taskForm" class="form-grid"><div class="field"><label>Tâche</label><input name="titre" required placeholder="Ex. Relancer fournisseur"></div><div class="field"><label>Échéance</label><input name="echeance" type="date" required></div><div class="btn-row full"><button class="btn btn-primary">Ajouter</button></div></form>${tasks.map(t=>`<div class="row-item"><div><strong>${esc(t.titre)}</strong><div class="row-meta">Échéance : ${esc(t.echeance)} · ${t.terminee?'Terminée':'À faire'}</div></div><button class="btn btn-ghost" data-task-done="${t.id}">${t.terminee?'Réouvrir':'Terminer'}</button></div>`).join('')||'<div class="empty">Aucune tâche.</div>'}</div>
+ <div class="card"><h3>🎨 Confort & automatisations</h3><div class="form-grid"><label>Thème <select id="prefTheme"><option value="light" ${conf.theme==='light'?'selected':''}>Clair</option><option value="dark" ${conf.theme==='dark'?'selected':''}>Sombre</option></select></label><label>Taille du texte <select id="prefFont"><option value="small" ${conf.fontSize==='small'?'selected':''}>Petite</option><option value="normal" ${(!conf.fontSize||conf.fontSize==='normal')?'selected':''}>Normale</option><option value="large" ${conf.fontSize==='large'?'selected':''}>Grande</option></select></label><label>Notifications <select id="prefNotif"><option value="on" ${conf.notifications!==false?'selected':''}>Activées</option><option value="off" ${conf.notifications===false?'selected':''}>Désactivées</option></select></label></div></div>
+ <div class="card"><h3>🧬 Migration structurelle P0</h3><div class="helper">Copie chaque client, produit, vente, dépense, facture, fournisseur et commande dans un document Firestore individuel, avec identifiant et date de modification, tout en conservant la compatibilité avec la V32.</div><button class="btn btn-primary" id="btnMigrateUnit">Lancer la migration progressive</button></div>
+ <div class="card"><h3>💰 Ajustements financiers immuables</h3>${(state.ajustementsFinanciers||[]).slice(-10).reverse().map(a=>`<div class="row-item"><div><strong>${esc(a.type)}</strong><div class="row-meta">Commande ${esc(a.commandeId)} · ${fmtGNF(a.montantInitial)} → ${fmtGNF(a.montantFinal)}</div></div><span class="pill ${a.delta>0?'pill-danger':'pill-ok'}">${a.delta>0?'+':''}${fmtGNF(a.delta)}</span></div>`).join('')||'<div class="empty">Aucun ajustement financier.</div>'}</div>
+ <div class="card"><h3>🔐 Journal & conflits</h3><div class="helper">Les écritures d’audit sont immuables. Les données Firestore utilisent la persistance hors ligne. Les conflits détectés par version sont envoyés dans la file locale « à vérifier ».</div><button class="btn btn-ghost" id="btnShowConflicts">Voir les données à vérifier</button></div>`;
+}
+function attachAuditProHandlers(){
+ document.getElementById('auditNumForm')?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);state.parametres={...state.parametres,numerotation:{vente:fd.get('vente'),facture:fd.get('facture'),commande:fd.get('commande')}};await persist('parametres','modification');showToast('Numérotation enregistrée');render();});
+ let csvType=null; const inp=document.getElementById('auditCsvInput'); const pick=t=>{csvType=t;inp?.click();}; document.getElementById('csvClients')?.addEventListener('click',()=>pick('clients'));document.getElementById('csvProduits')?.addEventListener('click',()=>pick('produits'));document.getElementById('csvStock')?.addEventListener('click',()=>pick('stock'));inp?.addEventListener('change',()=>importerCSV(csvType,inp.files?.[0]));
+ document.getElementById('csvExport')?.addEventListener('click',()=>telechargerCSV(state.clients.map(c=>({Nom:c.nom,Telephone:c.telephone,Email:c.email})),`KlabCenter_clients_${todayISO()}.csv`));
+ document.getElementById('addFavorite')?.addEventListener('click',async()=>{const noms=state.produits.filter(p=>p.type!=='Service').slice(0,20).map(p=>p.nom).join(', ');const x=await customPrompt(`Entrez le nom exact d’un produit à ajouter aux favoris. Disponibles : ${noms}`,{title:'Produit favori',okText:'Ajouter'});if(!x)return;const p=state.produits.find(p=>p.nom.toLowerCase()===String(x).trim().toLowerCase());if(!p)return showToast('Produit introuvable');p.favori=true;await persist('produits','modification');showToast('⭐ Favori enregistré');render();});
+ document.getElementById('taskForm')?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);state.taches.push({id:uid('task'),titre:String(fd.get('titre')).trim(),echeance:fd.get('echeance'),terminee:false,auteurUid:currentUser?.uid||'',createdAt:new Date().toISOString()});await persist('taches','creation');render();});
+ document.getElementById('promoForm')?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);state.promotions.push({id:uid('promo'),nom:String(fd.get('nom')).trim(),remise:Number(fd.get('remise')||0),debut:fd.get('debut'),fin:fd.get('fin'),active:true,createdAt:new Date().toISOString()});await persist('promotions','creation');render();});
+ document.querySelectorAll('[data-promo-toggle]').forEach(b=>b.addEventListener('click',async()=>{const x=state.promotions.find(p=>p.id===b.dataset.promoToggle);if(!x)return;x.active=x.active===false;await persist('promotions','modification');render();}));
+ document.getElementById('btnBarcode')?.addEventListener('click',async()=>{try{if(!('BarcodeDetector' in window))return showToast('Scanner code-barres non pris en charge sur cet appareil');const detector=new BarcodeDetector();const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});const video=document.createElement('video');video.autoplay=true;video.playsInline=true;video.srcObject=stream;video.style.cssText='position:fixed;inset:10%;width:80%;height:60%;object-fit:cover;z-index:10000;background:#000;border-radius:18px';document.body.appendChild(video);await video.play();let done=false;const stop=()=>{stream.getTracks().forEach(t=>t.stop());video.remove();};const tick=async()=>{if(done)return;try{const codes=await detector.detect(video);if(codes[0]){done=true;const code=codes[0].rawValue;stop();const p=state.produits.find(x=>x.code===code);showToast(p?`Produit trouvé : ${p.nom}`:`Code ${code} non trouvé dans le catalogue`);}}catch(e){} if(!done)requestAnimationFrame(tick);};tick();setTimeout(()=>{if(!done){done=true;stop();}},15000);}catch(e){showToast('Impossible d’ouvrir la caméra');}});
+ document.querySelectorAll('[data-task-done]').forEach(b=>b.addEventListener('click',async()=>{const t=state.taches.find(x=>x.id===b.dataset.taskDone);if(!t)return;t.terminee=!t.terminee;await persist('taches','modification');render();}));
+ document.getElementById('prefTheme')?.addEventListener('change',async e=>{state.preferences.theme=e.target.value;applyPreferences();await persist('preferences','modification');});document.getElementById('prefFont')?.addEventListener('change',async e=>{state.preferences.fontSize=e.target.value;applyPreferences();await persist('preferences','modification');});document.getElementById('prefNotif')?.addEventListener('change',async e=>{state.preferences.notifications=e.target.value==='on';await persist('preferences','modification');});
+ document.getElementById('btnMigrateUnit')?.addEventListener('click',async()=>{if(await customConfirm('Copier les données actuelles vers les documents unitaires Firestore ? Les données existantes ne seront pas supprimées.',{title:'Migration progressive',okText:'Migrer'})) await migrerDonneesUnitaires();});
+ document.getElementById('btnShowConflicts')?.addEventListener('click',()=>{const q=JSON.parse(localStorage.getItem(userKey('write_queue'))||'[]');showToast(q.length?`${q.length} écriture(s) hors ligne à synchroniser/vérifier`:'Aucune donnée à vérifier');});
+}
+applyPreferences();
 </script>
 </body>
 </html>
