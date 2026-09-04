@@ -273,3 +273,10 @@ Les messages détaillés ne sont plus affichés sur le tableau de bord principal
 La rubrique « Demandes clients » conserve la boîte de réception et la distinction entre messages reçus, réponses envoyées, messages lus et messages non lus.
 
 La mise en page mobile utilise désormais toute la largeur disponible, empêche le débordement horizontal et adapte les cartes, les titres, les listes et les sélecteurs aux petits écrans. Le service worker est passé en v27.
+
+
+## 25. Version v31 — pilotage des approvisionnements
+
+Le tableau de bord affiche désormais les commandes d’approvisionnement encore ouvertes, leur fournisseur, leur nombre d’articles, leur total et leur statut. Le bouton **Modifier** ouvre directement la commande concernée sans rechercher son numéro dans l’historique. Le cache PWA est renouvelé avec `klabcenter-v31-operations-dashboard`.
+
+La règle Firestore du chemin historique `kc_tresorerie` utilise maintenant le nom correct `estEmployeDe`. Après publication des règles, vérifier l’accès du propriétaire et du rôle trésorier dans un environnement de test avant de déployer sur la base réelle.

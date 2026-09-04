@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>KlabCenter — Gestion d’activité</title>
 <meta name="description" content="KlabCenter : gestion des ventes, clients, produits, stocks, commandes, créances et trésorerie.">
-<meta name="application-version" content="2026.09-progressive-command">
+<meta name="application-version" content="2026.09-operations-dashboard">
 
 <!-- PWA : rend l'application installable comme une vraie appli -->
 <link rel="manifest" href="./manifest.json">
@@ -990,6 +990,7 @@ function viewAccueil(){
   const demandesOuvertes=demandesClientsAdmin.filter(d=>!['Acceptée','Refusée','Terminée'].includes(d.status||'Envoyée'));
   const messagesNonLus=messagesClientsAdmin.filter(m=>m.senderRole==='client' && m.luAdmin!==true);
   const creancesAnciennes=state.ventes.filter(v=>resteVente(v)>0&&((Date.now()-new Date((v.date||todayISO())+'T12:00:00').getTime())/86400000>=30));
+  const commandesOuvertes=[...state.commandes].filter(c=>statutCommande(c)!=='Réceptionnée'&&statutCommande(c)!=='Annulée').sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const derniersMessages=[...messagesClientsAdmin].sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).slice(0,5);
   return `
     <div class="dashboard-hero"><h2>Bonjour, ${esc(state.employeNom||'KlabCenter')}.</h2><p>Voici les éléments qui nécessitent votre attention aujourd’hui.</p><div class="dashboard-actions"><button class="btn" data-quick-tab="demandesClients">📨 Ouvrir les demandes</button><button class="btn" data-quick-tab="commandes">📋 Préparer une commande</button><button class="btn" data-quick-tab="ventes">🛒 Nouvelle vente</button><button class="btn" data-quick-tab="services">🧰 Nouvelle prestation</button><button class="btn" data-quick-tab="creances">🧾 Voir les créances</button><button class="btn" data-quick-tab="stockJournal">🔄 Journal stock</button>${estProprietaire()?'<button class="btn btn-primary" data-quick-report-day>🔒 Clôturer la journée</button>':''}</div></div>
@@ -1000,10 +1001,12 @@ function viewAccueil(){
       <div class="kpi-card metric-card"><div class="metric-icon danger">💸</div><div class="metric-copy"><div class="kpi-label">Dépenses</div><div class="kpi-value num bad">${fmtGNF(depensesTotal())}</div></div></div>
       <div class="kpi-card metric-card"><div class="metric-icon ok">📈</div><div class="metric-copy"><div class="kpi-label">Bénéfice estimé</div><div class="kpi-value num ${beneficeEstime()>=0?'good':'bad'}">${fmtGNF(beneficeEstime())}</div></div></div>
       <div class="kpi-card metric-card"><div class="metric-icon warn">⚠️</div><div class="metric-copy"><div class="kpi-label">Stock à surveiller</div><div class="kpi-value num ${alertes.length?'warn':'good'}">${alertes.length}</div></div></div>
+      <div class="kpi-card metric-card"><div class="metric-icon ok">📊</div><div class="metric-copy"><div class="kpi-label">Valeur du stock</div><div class="kpi-value num">${fmtGNF(valeurStock())}</div></div></div>
       <div class="kpi-card metric-card"><div class="metric-icon">📨</div><div class="metric-copy"><div class="kpi-label">Demandes ouvertes</div><div class="kpi-value num ${demandesOuvertes.length?'warn':'good'}">${demandesOuvertes.length}</div></div></div>
       <div class="kpi-card metric-card"><div class="metric-icon danger">💬</div><div class="metric-copy"><div class="kpi-label">Messages non lus</div><div class="kpi-value num ${messagesNonLus.length?'bad':'good'}">${messagesNonLus.length}</div></div></div>
       <div class="kpi-card metric-card"><div class="metric-icon danger">⏰</div><div class="metric-copy"><div class="kpi-label">Créances +30 jours</div><div class="kpi-value num ${creancesAnciennes.length?'bad':'good'}">${creancesAnciennes.length}</div></div></div>
     </div>
+    <div class="card"><h3>📦 Approvisionnements en cours <span class="status-badge">${commandesOuvertes.length}</span></h3>${commandesOuvertes.length?`<div class="dashboard-list">${commandesOuvertes.slice(0,5).map(c=>{const f=fournisseurById(c.fournisseurId);return `<div class="row-item"><div class="row-main"><div class="row-title">${esc(c.numero)} · ${esc(f?.nom||'Fournisseur')}</div><div class="row-meta">${c.lignes?.length||0} article(s) · Total ${fmtGNF(commandeTotal(c))} · ${statutCommande(c)}</div></div><button class="btn btn-ghost" data-quick-edit-commande="${c.id}">Modifier</button></div>`;}).join('')}</div>`:'<div class="empty">Aucun approvisionnement en cours.</div>'}<div class="btn-row"><button class="btn btn-primary" data-quick-tab="commandes">Voir les commandes</button></div></div>
     <div class="card"><h3>📨 Demandes clients <span class="status-badge">${demandesOuvertes.length} en attente</span></h3>${demandesOuvertes.length?`<div class="dashboard-list">${demandesOuvertes.slice(0,5).map(d=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(d.itemName||'Demande')} · ${esc(d.clientEmail||'Client')}</div><div class="row-meta">${d.quantite||1} · ${fmtGNF(d.total||0)} · ${esc(d.status||'Envoyée')}</div></div><span class="pill pill-warn">À traiter</span></div>`).join('')}</div>`:'<div class="empty">Aucune demande en attente.</div>'}<div class="btn-row"><button class="btn btn-primary" data-quick-tab="demandesClients">Voir toutes les demandes</button></div></div>
     <div class="card"><h3>📈 Évolution (6 derniers mois)</h3><canvas id="chartCA" height="190"></canvas></div>
     ${alertes.length>0 ? `<div class="card"><h3>⚠️ Articles à réapprovisionner</h3><div class="list">${alertes.map(p=>`<div class="row-item"><div class="row-main"><div class="row-title">${esc(p.nom)}</div><div class="row-meta">Stock actuel : ${stockActuel(p)}</div></div><span class="pill ${statutStock(p)==='RUPTURE'?'pill-danger':'pill-warn'}">${statutStock(p)}</span></div>`).join('')}</div></div>` : ''}
@@ -1025,6 +1028,7 @@ function monthlyData(months){
 let accueilChart = null;
 function attachAccueilHandlers(){
   document.querySelectorAll('[data-quick-tab]').forEach(b=>b.addEventListener('click',()=>{state.activeTab=b.dataset.quickTab;render();}));
+  document.querySelectorAll('[data-quick-edit-commande]').forEach(b=>b.addEventListener('click',()=>{const c=state.commandes.find(x=>x.id===b.dataset.quickEditCommande);if(!c||!commandeModifiable(c)){showToast('Cette commande ne peut plus être modifiée après réception.');return;}state.activeTab='commandes';state.editing.commandes=c.id;commandeFormTmp={fournisseurId:c.fournisseurId||'',date:c.date||todayISO(),observations:c.observations||''};commandeLignesTmp=(c.lignes||[]).map(l=>({...l}));render();}));
   document.querySelector('[data-quick-report-day]')?.addEventListener('click',()=>{rapportPeriode={debut:todayISO(),fin:todayISO(),type:'jour'};state.activeTab='rapports';render();});
   const canvas = document.getElementById('chartCA');
   if(!canvas || typeof Chart==='undefined') return;
@@ -1908,7 +1912,8 @@ function viewCommandes(){
   if(editObj && commandeLignesTmp.length===1 && !commandeLignesTmp[0].produitId) commandeLignesTmp=(editObj.lignes||[]).map(l=>({...l}));
   const lignes=commandeLignesTmp.length?commandeLignesTmp:[{produitId:'',quantite:1,prixUnitaire:0}];
   const fournisseurOptions='<option value="">— Choisir un fournisseur —</option>'+state.fournisseurs.map(f=>`<option value="${f.id}" ${commandeFormTmp.fournisseurId===f.id?'selected':''}>${esc(f.nom)}</option>`).join('');
-  const liste=[...state.commandes].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const q=(state.search.commandes||'').trim().toLowerCase();
+  const liste=[...state.commandes].filter(c=>{const f=fournisseurById(c.fournisseurId);return !q||[c.numero,f?.nom,statutCommande(c),c.modePaiement].filter(Boolean).join(' ').toLowerCase().includes(q);}).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const historyHtml = liste.length===0 ? '<div class="empty">Aucune commande préparée.</div>' : '<div class="list">' + liste.map(c=>{ const f=fournisseurById(c.fournisseurId); const statut=statutCommande(c); const receive=statut!=='Réceptionnée'&&statut!=='Annulée' ? '<button class="btn btn-primary" style="padding:6px 9px;font-size:11px;" data-receive-commande="'+c.id+'">Réceptionner</button>' : ''; const validate=estProprietaire()&&c.statut==='Brouillon' ? '<button class="btn btn-primary" style="padding:6px 9px;font-size:11px;" data-validate-commande="'+c.id+'">Valider & payer</button>' : ''; const cancel=estProprietaire()&&c.statut!=='Annulée' ? '<button class="row-del" data-cancel-commande="'+c.id+'" title="Annuler la commande">✕</button>' : ''; const edit=commandeModifiable(c) ? '<button class="btn btn-ghost" style="padding:6px 9px;font-size:11px;" data-edit-commande="'+c.id+'" title="Modifier ou ajouter un article">✎ Modifier / ajouter</button>' : ''; return '<div class="row-item"><div class="row-main"><div class="row-title">'+esc(c.numero)+' · '+esc(f?f.nom:'Fournisseur supprimé')+'</div><div class="row-meta">'+fmtDate(c.date)+' · '+statut+' · '+c.lignes.length+' ligne(s) · Total '+fmtGNF(commandeTotal(c))+(c.modePaiement?' · '+esc(c.modePaiement):'')+'</div></div>'+edit+'<button class="row-edit" data-print-commande="'+c.id+'" title="Imprimer">⎙</button>'+validate+receive+cancel+'</div>'; }).join('') + '</div>';
   return `<div class="section-title">Commandes d’approvisionnement</div>
     <div class="section-sub">Saisissez les articles progressivement, puis utilisez « Modifier / ajouter » pour ajuster une quantité, un prix ou ajouter un article sans effacer les autres saisies. La validation globale n’empêche plus ces ajustements avant réception ; le stock ne change qu’à la réception.</div>
@@ -1926,6 +1931,7 @@ function viewCommandes(){
         </form>
       </div>
       <div><div class="section-divider">Historique des commandes</div>
+        <div class="search-box"><input id="searchCommandes" placeholder="Rechercher par numéro, fournisseur ou statut…" value="${esc(state.search.commandes||'')}"></div>
         ${historyHtml}
       </div>
     </div>`;
@@ -2052,6 +2058,7 @@ function attachCommandesHandlers(){
     if(depenseModifiee) await persist('depenses','modification');
     await persist('commandes',editId?'modification':'creation'); showToast(depenseModifiee?'Commande modifiée et paiement mis à jour':catalogueAjoute?'Commande enregistrée et nouveau bien ajouté au catalogue':'Commande enregistrée'); render();
   });
+  document.getElementById('searchCommandes')?.addEventListener('input',e=>{state.search.commandes=e.target.value;render();setTimeout(()=>{const input=document.getElementById('searchCommandes');if(input){input.focus();input.setSelectionRange(input.value.length,input.value.length);}},0);});
   document.querySelectorAll('[data-edit-commande]').forEach(b=>b.addEventListener('click',()=>{const c=state.commandes.find(x=>x.id===b.dataset.editCommande);if(!commandeModifiable(c)){showToast('Cette commande ne peut plus être modifiée après réception.');return;}state.editing.commandes=c.id;commandeFormTmp={fournisseurId:c.fournisseurId||'',date:c.date||todayISO(),observations:c.observations||''};commandeLignesTmp=(c.lignes||[]).map(l=>({...l}));render();}));
   document.querySelectorAll('[data-print-commande]').forEach(b=>b.addEventListener('click',()=>imprimerCommande(b.dataset.printCommande)));
   document.querySelectorAll('[data-receive-commande]').forEach(b=>b.addEventListener('click',()=>receptionnerCommande(b.dataset.receiveCommande)));

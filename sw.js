@@ -1,4 +1,4 @@
-const CACHE_NAME = 'klabcenter-v30-progressive-command';
+const CACHE_NAME = 'klabcenter-v31-operations-dashboard';
 const CORE_ASSETS = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png', './logo-klabcenter.png'];
 
 self.addEventListener('install', event => {
